@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Barbertime — Barbería clásica en Sogamoso</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Oswald:wght@400;500;600&family=Lora:ital,wght@0,400;0,500;1,400&family=Pinyon+Script&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="barbertime.css" />
+</head>
+<body>
+
+<!-- ===================== NAV ===================== -->
+<header class="nav">
+  <div class="wrap nav__inner">
+    <a href="#inicio" class="brand">
+      <div class="barberpole brand__pole"></div>
+      <span class="brand__name">BARBER<b>TIME</b></span>
+    </a>
+    <nav class="nav__links">
+      <a href="#nosotros" class="nav__link">Nosotros</a>
+      <a href="#servicios" class="nav__link">Servicios</a>
+      <a href="#horarios" class="nav__link">Horarios</a>
+      <a href="#contacto" class="nav__link">Contacto</a>
+      <button class="btn btn--ghost" data-auth="login">Iniciar sesión</button>
+      <button class="btn btn--gold" data-auth="register">Registrarse</button>
+    </nav>
+  </div>
+</header>
+
+<!-- ===================== HERO ===================== -->
+<section class="hero" id="inicio" data-screen-label="Hero">
+  <div class="wrap hero__inner">
+    <div class="hero__copy">
+      <span class="hero__eyebrow label">Barbería clásica · Sogamoso</span>
+      <span class="hero__est">desde 1998</span>
+      <h1>EL ARTE DE<br />LA NAVAJA <span class="amp">&amp;</span><br />LA TIJERA</h1>
+      <p class="hero__lead">
+        En Barbertime cuidamos cada corte como se hacía toda la vida: toalla
+        caliente, navaja afilada y un buen rato de conversación. Tradición,
+        estilo y filo a la altura de tu look.
+      </p>
+      <div class="hero__cta">
+        <button class="btn btn--gold btn--lg" data-auth="register">Registrarse y reservar</button>
+        <button class="btn btn--ghost btn--lg" data-auth="login">Iniciar sesión</button>
+      </div>
+    </div>
+    <div class="hero__media">
+      <div class="hero__frame">
+        <image-slot id="bt-hero" shape="rounded" radius="8"
+          placeholder="Foto de la barbería / barbero (vertical)"></image-slot>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== NOSOTROS ===================== -->
+<section class="section section--cream" id="nosotros" data-screen-label="Nosotros">
+  <div class="wrap">
+    <div class="about">
+      <div class="about__media">
+        <image-slot id="bt-local" shape="rounded" radius="12"
+          placeholder="Foto del local / ambiente"></image-slot>
+      </div>
+      <div class="about__copy">
+        <span class="section__eyebrow label">Nuestra casa</span>
+        <h3>Más que un corte,<br />una tradición.</h3>
+        <p>
+          Somos una barbería de barrio con alma de oficio. Aquí no hay prisa:
+          cada cliente se sienta, se relaja y sale renovado. Cortes clásicos,
+          arreglo de barba y el ritual de la navaja, hechos por manos que llevan
+          años en el oficio.
+        </p>
+        <p>
+          Nos encontrarás en el centro de Sogamoso, listos para atenderte de
+          lunes a viernes.
+        </p>
+        <div class="facts">
+          <div class="fact">
+            <div class="fact__k">Dirección</div>
+            <div class="fact__v">Calle 5 Sur # 12&#8209;35, Sogamoso</div>
+          </div>
+          <div class="fact">
+            <div class="fact__k">Atención</div>
+            <div class="fact__v">Lunes a viernes · 9:00 – 20:00</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== SERVICIOS ===================== -->
+<section class="section section--paper" id="servicios" data-screen-label="Servicios">
+  <div class="wrap">
+    <div class="section__head">
+      <span class="section__eyebrow label">Carta de servicios</span>
+      <h2 class="section__title">Servicios &amp; precios</h2>
+      <p class="section__sub">Precios en pesos colombianos. Reserva tu cita registrándote en segundos.</p>
+    </div>
+    <div class="menu">
+      <div class="svc">
+        <div>
+          <span class="svc__name">Corte clásico</span>
+          <span class="svc__desc">Tijera y máquina, lavado y peinado.</span>
+        </div>
+        <span class="svc__price">$25.000</span>
+      </div>
+      <div class="svc">
+        <div>
+          <span class="svc__name">Corte + barba</span>
+          <span class="svc__desc">El combo completo, de pies a cabeza.</span>
+        </div>
+        <span class="svc__price">$38.000</span>
+      </div>
+      <div class="svc">
+        <div>
+          <span class="svc__name">Arreglo de barba</span>
+          <span class="svc__desc">Perfilado, navaja y toalla caliente.</span>
+        </div>
+        <span class="svc__price">$18.000</span>
+      </div>
+      <div class="svc">
+        <div>
+          <span class="svc__name">Afeitado a navaja</span>
+          <span class="svc__desc">El ritual clásico, apurado y suave.</span>
+        </div>
+        <span class="svc__price">$22.000</span>
+      </div>
+      <div class="svc">
+        <div>
+          <span class="svc__name">Corte infantil</span>
+          <span class="svc__desc">Para los más pequeños de la casa.</span>
+        </div>
+        <span class="svc__price">$18.000</span>
+      </div>
+      <div class="svc">
+        <div>
+          <span class="svc__name">Diseño &amp; líneas</span>
+          <span class="svc__desc">Detalles y figuras personalizadas.</span>
+        </div>
+        <span class="svc__price">$30.000</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== HORARIOS ===================== -->
+<section class="section section--wood" id="horarios" data-screen-label="Horarios">
+  <div class="wrap">
+    <div class="section__head">
+      <span class="section__eyebrow label">Te esperamos</span>
+      <h2 class="section__title">Horarios de atención</h2>
+    </div>
+    <div class="hours">
+      <div class="hours__row hours__row--open">
+        <span class="hours__day">Lunes a viernes</span>
+        <span><span class="hours__time">9:00 – 20:00</span><span class="hours__pill">Abierto</span></span>
+      </div>
+      <div class="hours__row">
+        <span class="hours__day">Sábado</span>
+        <span class="hours__time hours__time--closed">Cerrado</span>
+      </div>
+      <div class="hours__row">
+        <span class="hours__day">Domingo</span>
+        <span class="hours__time hours__time--closed">Cerrado</span>
+      </div>
+    </div>
+    <p class="hours__note">Última cita 30 minutos antes del cierre. Regístrate para reservar tu turno y evitar la espera.</p>
+  </div>
+</section>
+
+<!-- ===================== FOOTER ===================== -->
+<footer class="footer" id="contacto" data-screen-label="Footer">
+  <div class="wrap">
+    <div class="footer__grid">
+      <div>
+        <div class="footer__brand">
+          <div class="barberpole" style="height:34px"></div>
+          <span class="brand__name" style="font-size:26px">BARBER<b>TIME</b></span>
+        </div>
+        <p>Barbería clásica en el corazón de Sogamoso. Tradición, filo y buen estilo desde 1998.</p>
+        <div style="margin-top:18px; display:flex; gap:12px;">
+          <button class="btn btn--gold" data-auth="register">Registrarse</button>
+          <button class="btn btn--ghost" data-auth="login">Iniciar sesión</button>
+        </div>
+      </div>
+      <div>
+        <h4>Visítanos</h4>
+        <ul class="footer__list">
+          <li>Calle 5 Sur # 12&#8209;35</li>
+          <li>Sogamoso, Boyacá</li>
+          <li>Lun – Vie · 9:00 – 20:00</li>
+        </ul>
+      </div>
+      <div>
+        <h4>Síguenos</h4>
+        <ul class="footer__list">
+          <li><a href="#">Instagram</a></li>
+          <li><a href="#">Facebook</a></li>
+          <li><a href="#">WhatsApp</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="footer__bottom">
+      <span>© 2026 Barbertime · Todos los derechos reservados.</span>
+      <span>Hecho con filo en Sogamoso.</span>
+    </div>
+  </div>
+</footer>
+
+<div id="modal-root"></div>
+
+<script src="image-slot.js"></script>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script type="text/babel" src="app.jsx"></script>
+
+</body>
+</html>
