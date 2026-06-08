@@ -1,0 +1,178 @@
+/* ===========================================================
+   BARBERTIME — barber.css
+   Estilos exclusivos de la página del barbero (agenda diaria).
+   Complementa barbertime.css y dashboard.css, no los reemplaza.
+   Sin "cards": las citas se muestran como filas de agenda.
+   =========================================================== */
+
+/* ---- Barra de día (navegación de fecha) ---- */
+.agenda-daybar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-bottom: 24px;
+  padding-bottom: 22px;
+  border-bottom: 1px solid var(--hair);
+}
+.agenda-daybar__label {
+  font-family: var(--ff-display);
+  font-weight: 400;
+  font-size: clamp(22px, 3vw, 30px);
+  letter-spacing: .02em;
+  color: var(--ink);
+  text-transform: capitalize;
+}
+.agenda-daybar input[type="date"] {
+  font-family: var(--ff-body);
+  font-size: 15px;
+  color: var(--ink);
+  padding: 10px 12px;
+  border: 1.5px solid var(--hair);
+  border-radius: 9px;
+  background: var(--cream);
+  appearance: none;
+}
+.agenda-daybar input[type="date"]:focus {
+  outline: none;
+  border-color: var(--gold-deep);
+  box-shadow: 0 0 0 3px oklch(0.76 0.105 80 / 0.25);
+}
+.agenda-daybar__nav { display: flex; gap: 8px; }
+.agenda-daybar__spacer { flex: 1; }
+.agenda-daybar__count {
+  font-size: 14px;
+  color: var(--ink-soft);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- Botón secundario ---- */
+.btn--outline {
+  background: transparent;
+  color: var(--ink-soft);
+  border-color: var(--hair);
+}
+.btn--outline:hover { border-color: var(--gold-deep); color: var(--gold-deep); }
+
+/* ---- Contenedor de la agenda ---- */
+.agenda {
+  border: 1px solid var(--hair);
+  border-radius: 14px;
+  overflow: hidden;
+  background: var(--paper);
+}
+
+/* ---- Fila de cita ---- */
+.agenda-row {
+  display: grid;
+  grid-template-columns: 96px 1fr auto;
+  gap: 20px;
+  align-items: center;
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--hair);
+  border-left: 3px solid transparent;
+  transition: background .18s;
+}
+.agenda-row:last-child { border-bottom: none; }
+.agenda-row:hover { background: oklch(0.76 0.105 80 / 0.05); }
+
+/* Acento izquierdo por estado (sutil) */
+.agenda-row--pendiente  { border-left-color: oklch(0.78 0.10 76); }
+.agenda-row--confirmada { border-left-color: oklch(0.55 0.13 148); }
+.agenda-row--completada { border-left-color: var(--gold-deep); }
+.agenda-row--cancelada  { border-left-color: oklch(0.62 0.14 28); }
+
+.agenda-row--final { opacity: 0.62; }
+
+@media (max-width: 640px) {
+  .agenda-row {
+    grid-template-columns: 70px 1fr;
+    gap: 14px;
+  }
+  .agenda-row__actions { grid-column: 1 / -1; justify-content: flex-start; }
+}
+
+/* Hora + duración */
+.agenda-row__time {
+  font-family: var(--ff-display);
+  font-weight: 400;
+  font-size: 28px;
+  line-height: 1;
+  letter-spacing: .02em;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.agenda-row__dur {
+  display: block;
+  margin-top: 5px;
+  font-family: var(--ff-label);
+  text-transform: uppercase;
+  letter-spacing: .14em;
+  font-size: 10.5px;
+  color: var(--ink-soft);
+}
+
+/* Detalle */
+.agenda-row__service {
+  font-size: 18px;
+  color: var(--ink);
+  margin: 0 0 5px;
+}
+.agenda-row__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  font-size: 13.5px;
+  color: var(--ink-soft);
+}
+.agenda-row__notes {
+  margin-top: 8px;
+  font-size: 13.5px;
+  color: var(--ink-soft);
+  font-style: italic;
+}
+.agenda-row__price {
+  font-family: var(--ff-display);
+  font-size: 18px;
+  color: var(--gold-deep);
+  letter-spacing: .02em;
+}
+
+/* Acciones */
+.agenda-row__actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+}
+.agenda-row__status {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.btn--xs {
+  padding: 8px 14px;
+  font-size: 11.5px;
+  letter-spacing: .1em;
+}
+
+/* ---- Leyenda de estados ---- */
+.agenda-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-top: 18px;
+  font-size: 12.5px;
+  color: var(--ink-soft);
+}
+.agenda-legend span { display: inline-flex; align-items: center; gap: 7px; }
+.agenda-legend i {
+  width: 12px; height: 12px; border-radius: 3px; display: inline-block;
+}
+.agenda-legend i.pendiente  { background: oklch(0.78 0.10 76); }
+.agenda-legend i.confirmada { background: oklch(0.55 0.13 148); }
+.agenda-legend i.completada { background: var(--gold-deep); }
+.agenda-legend i.cancelada  { background: oklch(0.62 0.14 28); }

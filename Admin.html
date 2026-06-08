@@ -1,0 +1,669 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Barbertime — Administración</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Oswald:wght@400;500;600&family=Lora:ital,wght@0,400;0,500;1,400&family=Pinyon+Script&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="barbertime.css" />
+<link rel="stylesheet" href="dashboard.css" />
+<link rel="stylesheet" href="admin.css" />
+</head>
+<body class="dash-body">
+
+<!-- ===================== NAV (admin) ===================== -->
+<header class="nav">
+  <div class="wrap nav__inner">
+    <a href="Barbertime.html" class="brand">
+      <div class="barberpole brand__pole"></div>
+      <span class="brand__name">BARBER<b>TIME</b></span>
+    </a>
+    <nav class="nav__links nav__links--dash">
+      <span class="nav__greeting" id="nav-greeting">Administración</span>
+      <button class="btn btn--ghost btn--sm" id="btn-logout">Cerrar sesión</button>
+    </nav>
+  </div>
+</header>
+
+<div id="admin-root"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
+
+<!-- ===== admin.jsx EN LÍNEA ===== -->
+<script type="text/babel" data-presets="react">
+/* global React, ReactDOM */
+const { useState, useEffect, useCallback } = React;
+
+/* ============================================================
+   CONFIGURACIÓN DE ENDPOINTS
+   ============================================================ */
+const API = {
+  USUARIOS: "http://localhost:5000",  // gestión de usuarios
+  ADMIN:    "http://localhost:4004",  // estadísticas (todas requieren token admin)
+};
+
+/* ──────────── HELPERS ──────────── */
+function getToken() {
+  return localStorage.getItem("bt_token") || "";
+}
+function getUser() {
+  try { return JSON.parse(localStorage.getItem("bt_user") || "{}"); }
+  catch { return {}; }
+}
+
+async function apiFetch(url, options = {}) {
+  const token = getToken();
+  const res = await fetch(url, {
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(options.headers || {}),
+    },
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.mensaje || data.error || `Error ${res.status}`);
+  return data;
+}
+
+/* ──────────── FORMATTERS ──────────── */
+function fmtPrice(n) {
+  return `$${Number(n || 0).toLocaleString("es-CO")}`;
+}
+function fmtDate(iso) {
+  if (!iso) return "—";
+  return new Date(iso).toLocaleDateString("es-CO", {
+    year: "numeric", month: "short", day: "numeric",
+  });
+}
+function cap(s) {
+  if (!s) return "—";
+  const t = String(s).replace(/_/g, " ");
+  return t.charAt(0).toUpperCase() + t.slice(1);
+}
+function nombreCompleto(u) {
+  return [u.nombres, u.apellido].filter(Boolean).join(" ") || "(sin nombre)";
+}
+
+/* Construye query string ?desde=...&hasta=... ignorando vacíos */
+function rangoQuery(desde, hasta) {
+  const p = new URLSearchParams();
+  if (desde) p.set("desde", new Date(desde + "T00:00:00").toISOString());
+  if (hasta) p.set("hasta", new Date(hasta + "T23:59:59").toISOString());
+  const s = p.toString();
+  return s ? `?${s}` : "";
+}
+
+/* ════════════════════════════════════════════════════════════
+   ESTADÍSTICAS
+   ════════════════════════════════════════════════════════════ */
+function EstadisticasTab() {
+  const [desde, setDesde] = useState("");
+  const [hasta, setHasta] = useState("");
+  const [rango, setRango] = useState({ desde: "", hasta: "" }); // aplicado
+
+  const [resumen,     setResumen]     = useState(null);
+  const [porOrigen,   setPorOrigen]   = useState([]);
+  const [porCategoria, setPorCategoria] = useState([]);
+  const [barberos,    setBarberos]    = useState([]);
+  const [loading,     setLoading]     = useState(true);
+  const [error,       setError]       = useState(null);
+
+  const cargar = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    const q = rangoQuery(rango.desde, rango.hasta);
+    try {
+      /* Las cuatro consultas en paralelo. Si una falla, no tumba al resto. */
+      const [r, o, c, b] = await Promise.allSettled([
+        apiFetch(`${API.ADMIN}/api/admin/estadisticas/resumen${q}`),
+        apiFetch(`${API.ADMIN}/api/admin/estadisticas/ingresos-por-origen${q}`),
+        apiFetch(`${API.ADMIN}/api/admin/estadisticas/gastos-por-categoria${q}`),
+        apiFetch(`${API.ADMIN}/api/admin/estadisticas/barberos${q}`),
+      ]);
+
+      if (r.status === "fulfilled") setResumen(r.value.data || r.value);
+      else throw r.reason; // el resumen es el dato base; si falla, mostramos error
+
+      setPorOrigen(o.status === "fulfilled" ? (o.value.data || o.value || []) : []);
+      setPorCategoria(c.status === "fulfilled" ? (c.value.data || c.value || []) : []);
+      setBarberos(b.status === "fulfilled" ? (b.value.data || b.value || []) : []);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [rango]);
+
+  useEffect(() => { cargar(); }, [cargar]);
+
+  function aplicar() { setRango({ desde, hasta }); }
+  function limpiar() { setDesde(""); setHasta(""); setRango({ desde: "", hasta: "" }); }
+
+  return (
+    <div>
+      <div className="dash-section-head">
+        <h2>Estadísticas</h2>
+        <p>Resumen financiero del periodo seleccionado. Deja las fechas vacías para ver todo el histórico.</p>
+      </div>
+
+      {/* Filtros de fecha */}
+      <div className="admin-toolbar">
+        <div className="admin-filter">
+          <label htmlFor="est-desde">Desde</label>
+          <input id="est-desde" type="date" value={desde} onChange={(e) => setDesde(e.target.value)} />
+        </div>
+        <div className="admin-filter">
+          <label htmlFor="est-hasta">Hasta</label>
+          <input id="est-hasta" type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} />
+        </div>
+        <div className="admin-toolbar__actions">
+          <button className="btn btn--gold btn--sm" onClick={aplicar}>Aplicar</button>
+          <button className="btn btn--outline btn--sm" onClick={limpiar}>Todo el histórico</button>
+        </div>
+      </div>
+
+      {loading && <div className="spinner" />}
+      {error && <div className="msg msg--error">No se pudieron cargar las estadísticas: {error}</div>}
+
+      {!loading && !error && resumen && (
+        <>
+          {/* Franja resumen (libro contable, no card) */}
+          <div className="ledger">
+            <div className="ledger__item">
+              <div className="ledger__k">Dinero ingresado</div>
+              <div className="ledger__v ledger__v--in">{fmtPrice(resumen.dineroIngresado)}</div>
+              <div className="ledger__sub">{Number(resumen.cantidadIngresos || 0)} registros</div>
+            </div>
+            <div className="ledger__item">
+              <div className="ledger__k">Dinero que sale</div>
+              <div className="ledger__v ledger__v--out">{fmtPrice(resumen.dineroQueSale)}</div>
+              <div className="ledger__sub">{Number(resumen.cantidadGastos || 0)} registros</div>
+            </div>
+            <div className="ledger__item">
+              <div className="ledger__k">Ganancias netas</div>
+              <div className="ledger__v ledger__v--net">{fmtPrice(resumen.gananciasnetas)}</div>
+              <div className="ledger__sub">Ingresos − gastos</div>
+            </div>
+          </div>
+
+          {/* Ingresos por origen */}
+          <div className="admin-block">
+            <h3 className="admin-block__title">Ingresos por origen</h3>
+            {porOrigen.length === 0 ? (
+              <div className="msg" style={{ background: "var(--cream-2)", color: "var(--ink-soft)" }}>
+                Sin ingresos registrados en este periodo.
+              </div>
+            ) : (
+              <div className="admin-table-wrap">
+                <table className="admin-table">
+                  <thead>
+                    <tr><th>Origen</th><th className="num">Registros</th><th className="num">Total</th></tr>
+                  </thead>
+                  <tbody>
+                    {porOrigen.map((row) => (
+                      <tr key={row._id}>
+                        <td>{cap(row._id)}</td>
+                        <td className="num">{Number(row.cantidad || 0)}</td>
+                        <td className="money">{fmtPrice(row.total)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          {/* Gastos por categoría */}
+          <div className="admin-block">
+            <h3 className="admin-block__title">Gastos por categoría</h3>
+            {porCategoria.length === 0 ? (
+              <div className="msg" style={{ background: "var(--cream-2)", color: "var(--ink-soft)" }}>
+                Sin gastos registrados en este periodo.
+              </div>
+            ) : (
+              <div className="admin-table-wrap">
+                <table className="admin-table">
+                  <thead>
+                    <tr><th>Categoría</th><th className="num">Registros</th><th className="num">Total</th></tr>
+                  </thead>
+                  <tbody>
+                    {porCategoria.map((row) => (
+                      <tr key={row._id}>
+                        <td>{cap(row._id)}</td>
+                        <td className="num">{Number(row.cantidad || 0)}</td>
+                        <td className="money">{fmtPrice(row.total)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          {/* Rendimiento por barbero */}
+          <div className="admin-block">
+            <h3 className="admin-block__title">Rendimiento por barbero</h3>
+            {barberos.length === 0 ? (
+              <div className="msg" style={{ background: "var(--cream-2)", color: "var(--ink-soft)" }}>
+                Sin datos de barberos en este periodo.
+              </div>
+            ) : (
+              <div className="admin-table-wrap">
+                <table className="admin-table">
+                  <thead>
+                    <tr>
+                      <th>Barbero</th>
+                      <th className="num">Servicios</th>
+                      <th className="num">Ingresos</th>
+                      <th className="num">Nómina</th>
+                      <th className="num">Rentabilidad</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {barberos.map((b) => (
+                      <tr key={b.barberoId}>
+                        <td className="admin-table__name">{b.nombreBarbero || "—"}</td>
+                        <td className="num">{Number(b.totalServicios || 0)}</td>
+                        <td className="money">{fmtPrice(b.totalIngresos)}</td>
+                        <td className="num">{fmtPrice(b.totalNomina)}</td>
+                        <td className="money">{fmtPrice(b.rentabilidad)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+/* ════════════════════════════════════════════════════════════
+   MODAL DE EDICIÓN DE USUARIO
+   ════════════════════════════════════════════════════════════ */
+const ROLES = ["cliente", "barbero", "admin"];
+
+function EditUserModal({ usuario, onClose, onSaved }) {
+  const [f, setF] = useState({
+    nombres:  usuario.nombres || "",
+    apellido: usuario.apellido || "",
+    telefono: usuario.telefono || "",
+    ciudad:   usuario.ciudad || "",
+    edad:     usuario.edad ?? "",
+  });
+  const [rol, setRol] = useState(usuario.tipoUsuario || "cliente");
+  const [loading, setLoading] = useState(false);
+  const [error,   setError]   = useState(null);
+
+  const set = (k) => (e) => setF((s) => ({ ...s, [k]: e.target.value }));
+
+  async function guardar() {
+    setError(null);
+    setLoading(true);
+    try {
+      /* 1) Datos de perfil → PUT /api/usuarios/:id */
+      await apiFetch(`${API.USUARIOS}/api/usuarios/${usuario._id}`, {
+        method: "PUT",
+        body: JSON.stringify({
+          nombres:  f.nombres.trim(),
+          apellido: f.apellido.trim() || undefined,
+          telefono: f.telefono.trim() || undefined,
+          ciudad:   f.ciudad.trim() || undefined,
+          edad:     f.edad === "" ? undefined : Number(f.edad),
+        }),
+      });
+
+      /* 2) Si cambió el rol → PATCH /api/usuarios/:id/rol */
+      if (rol !== usuario.tipoUsuario) {
+        await apiFetch(`${API.USUARIOS}/api/usuarios/${usuario._id}/rol`, {
+          method: "PATCH",
+          body: JSON.stringify({ tipoUsuario: rol }),
+        });
+      }
+
+      onSaved();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="overlay" onMouseDown={(e) => { if (e.target.classList.contains("overlay")) onClose(); }}>
+      <div className="modal" role="dialog" aria-modal="true" style={{ maxWidth: 520 }}>
+        <div className="modal__top">
+          <button className="modal__close" aria-label="Cerrar" onClick={onClose}>×</button>
+          <div className="barberpole modal__pole"></div>
+          <h2 className="modal__title">Editar usuario</h2>
+          <p className="modal__sub">{usuario.email}</p>
+        </div>
+        <div className="modal__body">
+          {error && <div className="msg msg--error">{error}</div>}
+
+          <div className="edit-grid">
+            <div className="field">
+              <label htmlFor="eu-nombres">Nombres</label>
+              <input id="eu-nombres" value={f.nombres} onChange={set("nombres")} />
+            </div>
+            <div className="field">
+              <label htmlFor="eu-apellido">Apellido</label>
+              <input id="eu-apellido" value={f.apellido} onChange={set("apellido")} />
+            </div>
+            <div className="field">
+              <label htmlFor="eu-tel">Teléfono</label>
+              <input id="eu-tel" value={f.telefono} onChange={set("telefono")} />
+            </div>
+            <div className="field">
+              <label htmlFor="eu-edad">Edad</label>
+              <input id="eu-edad" type="number" min="0" value={f.edad} onChange={set("edad")} />
+            </div>
+            <div className="field">
+              <label htmlFor="eu-ciudad">Ciudad</label>
+              <input id="eu-ciudad" value={f.ciudad} onChange={set("ciudad")} />
+            </div>
+            <div className="field">
+              <label htmlFor="eu-rol">Rol</label>
+              <select id="eu-rol" value={rol} onChange={(e) => setRol(e.target.value)}
+                style={{ width: "100%", fontFamily: "var(--ff-body)", fontSize: 16, color: "var(--ink)", padding: "13px 14px", border: "1.5px solid var(--hair)", borderRadius: 9, background: "var(--cream)", appearance: "none" }}>
+                {ROLES.map((r) => <option key={r} value={r}>{cap(r)}</option>)}
+              </select>
+            </div>
+          </div>
+
+          <div style={{ display: "flex", gap: 10, marginTop: 8, flexWrap: "wrap" }}>
+            <button className="btn btn--gold btn--lg" onClick={guardar} disabled={loading}>
+              {loading ? "Guardando…" : "Guardar cambios"}
+            </button>
+            <button className="btn btn--ghost" onClick={onClose}
+              style={{ borderColor: "var(--hair)", color: "var(--ink-soft)" }}>
+              Cancelar
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ──────────── Modal de confirmación de borrado ──────────── */
+function DeleteUserModal({ usuario, onClose, onDeleted }) {
+  const [loading, setLoading] = useState(false);
+  const [error,   setError]   = useState(null);
+
+  async function borrar() {
+    setError(null);
+    setLoading(true);
+    try {
+      await apiFetch(`${API.USUARIOS}/api/usuarios/${usuario._id}`, { method: "DELETE" });
+      onDeleted();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="overlay" onMouseDown={(e) => { if (e.target.classList.contains("overlay")) onClose(); }}>
+      <div className="modal" role="dialog" aria-modal="true" style={{ maxWidth: 420 }}>
+        <div className="modal__top">
+          <button className="modal__close" aria-label="Cerrar" onClick={onClose}>×</button>
+          <h2 className="modal__title">Eliminar usuario</h2>
+        </div>
+        <div className="modal__body">
+          {error && <div className="msg msg--error">{error}</div>}
+          <p style={{ fontSize: 15, color: "var(--ink-soft)", lineHeight: 1.6, marginTop: 0 }}>
+            Vas a eliminar a <strong style={{ color: "var(--ink)" }}>{nombreCompleto(usuario)}</strong> ({usuario.email}).
+            Esta acción no se puede deshacer.
+          </p>
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            <button className="btn btn--danger btn--lg" onClick={borrar} disabled={loading}>
+              {loading ? "Eliminando…" : "Sí, eliminar"}
+            </button>
+            <button className="btn btn--ghost" onClick={onClose}
+              style={{ borderColor: "var(--hair)", color: "var(--ink-soft)" }}>
+              Volver
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ════════════════════════════════════════════════════════════
+   USUARIOS
+   ════════════════════════════════════════════════════════════ */
+function UsuariosTab() {
+  const [tipo,   setTipo]   = useState("");
+  const [estado, setEstado] = useState("");
+  const [pagina, setPagina] = useState(1);
+  const limite = 10;
+
+  const [usuarios, setUsuarios] = useState([]);
+  const [pag,      setPag]      = useState({ pagina: 1, totalPaginas: 1, total: 0 });
+  const [loading,  setLoading]  = useState(true);
+  const [error,    setError]    = useState(null);
+
+  const [editing,  setEditing]  = useState(null);
+  const [deleting, setDeleting] = useState(null);
+
+  const cargar = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    const p = new URLSearchParams();
+    p.set("pagina", pagina);
+    p.set("limite", limite);
+    if (tipo)   p.set("tipoUsuario", tipo);
+    if (estado) p.set("estadoCuenta", estado);
+    try {
+      const res = await apiFetch(`${API.USUARIOS}/api/usuarios?${p.toString()}`);
+      setUsuarios(res.datos || res.data || []);
+      setPag(res.paginacion || { pagina: 1, totalPaginas: 1, total: (res.datos || []).length });
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [tipo, estado, pagina]);
+
+  useEffect(() => { cargar(); }, [cargar]);
+
+  /* Al cambiar filtros, volver a página 1 */
+  function cambiarTipo(v)   { setPagina(1); setTipo(v); }
+  function cambiarEstado(v) { setPagina(1); setEstado(v); }
+
+  return (
+    <div>
+      <div className="dash-section-head">
+        <h2>Usuarios</h2>
+        <p>Edita datos, cambia el rol o elimina cuentas. Solo los administradores tienen acceso.</p>
+      </div>
+
+      <div className="admin-toolbar">
+        <div className="admin-filter">
+          <label htmlFor="us-tipo">Rol</label>
+          <select id="us-tipo" value={tipo} onChange={(e) => cambiarTipo(e.target.value)}>
+            <option value="">Todos</option>
+            <option value="cliente">Cliente</option>
+            <option value="barbero">Barbero</option>
+            <option value="admin">Admin</option>
+          </select>
+        </div>
+        <div className="admin-filter">
+          <label htmlFor="us-estado">Estado de cuenta</label>
+          <select id="us-estado" value={estado} onChange={(e) => cambiarEstado(e.target.value)}>
+            <option value="">Todos</option>
+            <option value="activo">Activo</option>
+            <option value="inactivo">Inactivo</option>
+            <option value="suspendido">Suspendido</option>
+          </select>
+        </div>
+      </div>
+
+      {loading && <div className="spinner" />}
+      {error && <div className="msg msg--error">No se pudieron cargar los usuarios: {error}</div>}
+
+      {!loading && !error && usuarios.length === 0 && (
+        <div className="empty-state">
+          <p className="empty-state__title">Sin usuarios</p>
+          <p className="empty-state__sub">No hay cuentas que coincidan con los filtros.</p>
+        </div>
+      )}
+
+      {!loading && !error && usuarios.length > 0 && (
+        <>
+          <div className="admin-table-wrap">
+            <table className="admin-table">
+              <thead>
+                <tr>
+                  <th>Usuario</th>
+                  <th>Teléfono</th>
+                  <th>Ciudad</th>
+                  <th>Rol</th>
+                  <th>Estado</th>
+                  <th style={{ textAlign: "right" }}>Acciones</th>
+                </tr>
+              </thead>
+              <tbody>
+                {usuarios.map((u) => (
+                  <tr key={u._id}>
+                    <td>
+                      <div className="admin-table__name">{nombreCompleto(u)}</div>
+                      <div className="admin-table__email">{u.email}</div>
+                    </td>
+                    <td>{u.telefono || "—"}</td>
+                    <td>{u.ciudad || "—"}</td>
+                    <td><span className={`tag tag--${u.tipoUsuario}`}>{cap(u.tipoUsuario)}</span></td>
+                    <td><span className={`tag tag--${u.estadoCuenta}`}>{cap(u.estadoCuenta)}</span></td>
+                    <td>
+                      <div className="admin-table__actions">
+                        <button className="btn btn--outline btn--xs" onClick={() => setEditing(u)}>Editar</button>
+                        <button className="btn btn--danger btn--xs" onClick={() => setDeleting(u)}>Eliminar</button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="admin-pager">
+            <button
+              className="btn btn--outline btn--sm"
+              disabled={pag.pagina <= 1}
+              onClick={() => setPagina((n) => Math.max(1, n - 1))}
+            >Anterior</button>
+            <span className="admin-pager__info">
+              Página {pag.pagina} de {pag.totalPaginas} · {pag.total} usuarios
+            </span>
+            <button
+              className="btn btn--outline btn--sm"
+              disabled={pag.pagina >= pag.totalPaginas}
+              onClick={() => setPagina((n) => n + 1)}
+            >Siguiente</button>
+          </div>
+        </>
+      )}
+
+      {editing && (
+        <EditUserModal
+          usuario={editing}
+          onClose={() => setEditing(null)}
+          onSaved={() => { setEditing(null); cargar(); }}
+        />
+      )}
+      {deleting && (
+        <DeleteUserModal
+          usuario={deleting}
+          onClose={() => setDeleting(null)}
+          onDeleted={() => { setDeleting(null); cargar(); }}
+        />
+      )}
+    </div>
+  );
+}
+
+/* ════════════════════════════════════════════════════════════
+   RAÍZ
+   ════════════════════════════════════════════════════════════ */
+function Admin() {
+  const [tab, setTab] = useState("estadisticas");
+  const user = getUser();
+  const hayToken = !!getToken();
+  const esAdmin = user.tipoUsuario === "admin";
+
+  useEffect(() => {
+    const el = document.getElementById("nav-greeting");
+    if (el && user.nombres) el.textContent = `Admin · ${user.nombres.split(" ")[0]}`;
+  }, [user.nombres]);
+
+  useEffect(() => {
+    const btn = document.getElementById("btn-logout");
+    if (!btn) return;
+    const handle = () => {
+      localStorage.removeItem("bt_token");
+      localStorage.removeItem("bt_user");
+      window.location.href = "Barbertime.html";
+    };
+    btn.addEventListener("click", handle);
+    return () => btn.removeEventListener("click", handle);
+  }, []);
+
+  return (
+    <>
+      <section className="dash-hero">
+        <div className="wrap dash-hero__inner">
+          <div className="dash-hero__copy">
+            <span className="dash-hero__eyebrow">Panel interno</span>
+            <h1 className="dash-hero__title">ADMINIS<span>TRACIÓN</span></h1>
+            <p className="dash-hero__sub">Estadísticas del negocio y gestión de cuentas de usuario.</p>
+          </div>
+          <div style={{ textAlign: "right", opacity: 0.6 }}>
+            <div className="barberpole" style={{ height: 80, display: "inline-block" }}></div>
+          </div>
+        </div>
+      </section>
+
+      <div className="dash-tabs">
+        <button
+          className={`dash-tab${tab === "estadisticas" ? " dash-tab--active" : ""}`}
+          onClick={() => setTab("estadisticas")}
+        >Estadísticas</button>
+        <button
+          className={`dash-tab${tab === "usuarios" ? " dash-tab--active" : ""}`}
+          onClick={() => setTab("usuarios")}
+        >Usuarios</button>
+      </div>
+
+      <main className="dash-main">
+        <div className="wrap">
+          {(!hayToken || !esAdmin) && (
+            <div className="admin-notice">
+              {!hayToken
+                ? <>No hay una sesión iniciada. Esta página necesita un token de administrador para cargar datos. <a href="Barbertime.html">Inicia sesión</a> con una cuenta admin.</>
+                : <>La sesión actual no es de administrador (rol: <strong>{cap(user.tipoUsuario) || "desconocido"}</strong>). El backend rechazará estas peticiones con 403.</>}
+            </div>
+          )}
+
+          {tab === "estadisticas" && <EstadisticasTab />}
+          {tab === "usuarios" && <UsuariosTab />}
+        </div>
+      </main>
+    </>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("admin-root")).render(<Admin />);
+</script>
+
+</body>
+</html>

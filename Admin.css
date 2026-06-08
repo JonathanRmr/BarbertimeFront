@@ -1,0 +1,237 @@
+/* ===========================================================
+   BARBERTIME — admin.css
+   Estilos exclusivos del panel de administración.
+   Complementa barbertime.css y dashboard.css, no los reemplaza.
+   Sin "cards": estadísticas en franja-libro y datos en tablas.
+   =========================================================== */
+
+/* ---- Barra de herramientas / filtros ---- */
+.admin-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 14px 18px;
+  margin-bottom: 26px;
+  padding-bottom: 22px;
+  border-bottom: 1px solid var(--hair);
+}
+.admin-filter {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.admin-filter label {
+  font-family: var(--ff-label);
+  text-transform: uppercase;
+  letter-spacing: .14em;
+  font-size: 11.5px;
+  color: var(--ink-soft);
+}
+.admin-filter select,
+.admin-filter input {
+  font-family: var(--ff-body);
+  font-size: 15px;
+  color: var(--ink);
+  padding: 10px 12px;
+  border: 1.5px solid var(--hair);
+  border-radius: 9px;
+  background: var(--cream);
+  transition: border-color .18s, box-shadow .18s;
+  appearance: none;
+  min-width: 150px;
+}
+.admin-filter select:focus,
+.admin-filter input:focus {
+  outline: none;
+  border-color: var(--gold-deep);
+  box-shadow: 0 0 0 3px oklch(0.76 0.105 80 / 0.25);
+}
+.admin-toolbar__actions {
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+  margin-left: auto;
+}
+
+/* ---- Franja de resumen (estilo libro contable, no card) ---- */
+.ledger {
+  display: flex;
+  flex-wrap: wrap;
+  border: 1px solid var(--hair);
+  border-radius: 14px;
+  overflow: hidden;
+  background: var(--paper);
+  margin-bottom: 36px;
+}
+.ledger__item {
+  flex: 1 1 0;
+  min-width: 170px;
+  padding: 22px 26px;
+  border-right: 1px solid var(--hair);
+}
+.ledger__item:last-child { border-right: none; }
+@media (max-width: 720px) {
+  .ledger__item { flex-basis: 50%; border-bottom: 1px solid var(--hair); }
+}
+.ledger__k {
+  font-family: var(--ff-label);
+  text-transform: uppercase;
+  letter-spacing: .16em;
+  font-size: 11.5px;
+  color: var(--ink-soft);
+  margin-bottom: 8px;
+}
+.ledger__v {
+  font-family: var(--ff-display);
+  font-weight: 400;
+  font-size: 34px;
+  line-height: 1;
+  letter-spacing: .02em;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.ledger__v--in  { color: oklch(0.46 0.13 148); }
+.ledger__v--out { color: oklch(0.50 0.15 28); }
+.ledger__v--net { color: var(--gold-deep); }
+.ledger__sub {
+  margin-top: 6px;
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+
+/* ---- Tablas ---- */
+.admin-block { margin-bottom: 40px; }
+.admin-block__title {
+  font-family: var(--ff-display);
+  font-weight: 400;
+  font-size: clamp(24px, 3.5vw, 34px);
+  letter-spacing: .02em;
+  color: var(--ink);
+  margin: 0 0 16px;
+}
+
+.admin-table-wrap {
+  border: 1px solid var(--hair);
+  border-radius: 14px;
+  overflow-x: auto;
+  background: var(--paper);
+}
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--ff-body);
+  min-width: 560px;
+}
+.admin-table thead th {
+  font-family: var(--ff-label);
+  text-transform: uppercase;
+  letter-spacing: .12em;
+  font-size: 11.5px;
+  color: var(--gold-deep);
+  text-align: left;
+  padding: 15px 18px;
+  border-bottom: 2px solid var(--hair);
+  background: oklch(0.76 0.105 80 / 0.05);
+  white-space: nowrap;
+}
+.admin-table tbody td {
+  padding: 15px 18px;
+  border-bottom: 1px solid var(--hair);
+  font-size: 15px;
+  color: var(--ink);
+  vertical-align: middle;
+}
+.admin-table tbody tr:last-child td { border-bottom: none; }
+.admin-table tbody tr:hover { background: oklch(0.76 0.105 80 / 0.05); }
+.admin-table .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.admin-table .money {
+  text-align: right;
+  font-family: var(--ff-display);
+  font-size: 19px;
+  color: var(--gold-deep);
+  letter-spacing: .02em;
+  white-space: nowrap;
+}
+.admin-table__name { color: var(--ink); }
+.admin-table__email { font-size: 13.5px; color: var(--ink-soft); }
+.admin-table__actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+/* ---- Etiquetas sutiles (rol / estado) ---- */
+.tag {
+  display: inline-flex;
+  align-items: center;
+  font-family: var(--ff-label);
+  font-size: 11px;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--hair);
+  background: var(--cream-2);
+  color: var(--ink-soft);
+  white-space: nowrap;
+}
+.tag--admin   { background: oklch(0.76 0.105 80 / 0.14); color: var(--gold-deep); border-color: oklch(0.76 0.105 80 / 0.35); }
+.tag--barbero { background: oklch(0.55 0.06 250 / 0.12); color: oklch(0.45 0.08 250); border-color: oklch(0.55 0.06 250 / 0.3); }
+.tag--cliente { background: var(--cream-2); color: var(--ink-soft); }
+.tag--activo      { background: oklch(0.93 0.06 148 / 0.5); color: oklch(0.38 0.13 148); border-color: oklch(0.65 0.14 148 / 0.3); }
+.tag--inactivo    { background: var(--cream-2); color: var(--ink-soft); }
+.tag--suspendido  { background: oklch(0.95 0.02 28 / 0.6); color: oklch(0.48 0.12 28); border-color: oklch(0.75 0.12 28 / 0.3); }
+
+/* ---- Botón pequeño para acciones de fila ---- */
+.btn--xs {
+  padding: 7px 13px;
+  font-size: 11.5px;
+  letter-spacing: .1em;
+}
+.btn--outline {
+  background: transparent;
+  color: var(--ink-soft);
+  border-color: var(--hair);
+}
+.btn--outline:hover { border-color: var(--gold-deep); color: var(--gold-deep); }
+
+/* ---- Paginación ---- */
+.admin-pager {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  margin-top: 24px;
+}
+.admin-pager__info {
+  font-size: 14px;
+  color: var(--ink-soft);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- Aviso superior (sin token admin) ---- */
+.admin-notice {
+  background: oklch(0.94 0.05 76 / 0.55);
+  border: 1px solid oklch(0.78 0.10 70 / 0.4);
+  color: oklch(0.42 0.08 60);
+  border-radius: 10px;
+  padding: 14px 18px;
+  font-size: 14.5px;
+  line-height: 1.5;
+  margin-bottom: 26px;
+}
+.admin-notice a { color: var(--gold-deep); text-decoration: underline; }
+
+/* ---- Modal de edición: rejilla de campos ---- */
+.edit-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 16px;
+}
+@media (max-width: 520px) { .edit-grid { grid-template-columns: 1fr; } }
+.edit-grid .field--full { grid-column: 1 / -1; }

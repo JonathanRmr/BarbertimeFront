@@ -217,10 +217,63 @@
 <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" crossorigin="anonymous"></script>
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
 
-<!-- ===== app.jsx EN LÍNEA (antes era un archivo aparte) ===== -->
+<!-- ===== app.jsx EN LÍNEA (login/registro reales + redirección por rol) ===== -->
 <script type="text/babel" data-presets="react">
 /* global React, ReactDOM */
 const { useState, useEffect, useCallback } = React;
+
+/* ============================================================
+   CONFIGURACIÓN
+   ============================================================ */
+const API = {
+  USUARIOS: "http://localhost:5000",   // módulo de autenticación / usuarios
+};
+
+/* A qué panel va cada rol */
+function panelPorRol(tipo) {
+  if (tipo === "admin")   return "admin.html";
+  if (tipo === "barbero") return "barber.html";
+  return "dashboard.html";              // cliente (por defecto)
+}
+
+/* Guarda la sesión en localStorage y redirige al panel correspondiente */
+function guardarSesionYRedirigir(sesion) {
+  if (sesion.token)   localStorage.setItem("bt_token", sesion.token);
+  if (sesion.usuario) localStorage.setItem("bt_user", JSON.stringify(sesion.usuario));
+  const tipo = sesion.usuario && sesion.usuario.tipoUsuario;
+  window.location.href = panelPorRol(tipo);
+}
+
+/* POST a las rutas de auth del módulo Usuarios.
+   Respuesta esperada: { success, data: { usuario, token }, mensaje } */
+async function authPost(path, body) {
+  const res = await fetch(`${API.USUARIOS}${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  let data = {};
+  try { data = await res.json(); } catch { /* respuesta sin JSON */ }
+  if (!res.ok || data.success === false) {
+    throw new Error(data.error || data.mensaje || `Error ${res.status}`);
+  }
+  return data.data || data;   // { usuario, token }
+}
+
+/* Caja de error de API (Barbertime.html solo carga barbertime.css,
+   así que el estilo va en línea) */
+function ApiError({ children }) {
+  if (!children) return null;
+  return (
+    <div style={{
+      background: "oklch(0.97 0.02 28)",
+      border: "1px solid oklch(0.75 0.12 28 / 0.35)",
+      color: "oklch(0.42 0.14 28)",
+      borderRadius: 9, padding: "11px 14px", fontSize: 14,
+      lineHeight: 1.5, marginBottom: 16,
+    }}>{children}</div>
+  );
+}
 
 /* ---------- Validación ---------- */
 const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -248,22 +301,35 @@ const pole = (
 );
 
 /* ---------- Login ---------- */
-function LoginForm({ onSwitch, onDone }) {
+function LoginForm({ onSwitch }) {
   const [email, setEmail] = useState("");
   const [pass, setPass] = useState("");
   const [errs, setErrs] = useState({});
+  const [apiErr, setApiErr] = useState(null);
+  const [loading, setLoading] = useState(false);
 
-  function submit(e) {
+  async function submit(e) {
     e.preventDefault();
     const next = {};
     if (!emailRe.test(email)) next.email = "Introduce un correo válido.";
     if (pass.length < 6) next.pass = "Mínimo 6 caracteres.";
     setErrs(next);
-    if (Object.keys(next).length === 0) onDone("login", email);
+    if (Object.keys(next).length > 0) return;
+
+    setApiErr(null);
+    setLoading(true);
+    try {
+      const sesion = await authPost("/api/auth/login", { email, contrasena: pass });
+      guardarSesionYRedirigir(sesion);   // redirige según rol
+    } catch (err) {
+      setApiErr(err.message);
+      setLoading(false);
+    }
   }
 
   return (
     <form className="modal__body" onSubmit={submit} noValidate>
+      <ApiError>{apiErr}</ApiError>
       <Field id="li-email" label="Correo electrónico" type="email" value={email}
         onChange={setEmail} error={errs.email} placeholder="tu@correo.com" autoComplete="email" />
       <Field id="li-pass" label="Contraseña" type="password" value={pass}
@@ -272,7 +338,9 @@ function LoginForm({ onSwitch, onDone }) {
         <input id="remember" type="checkbox" defaultChecked />
         <label htmlFor="remember">Recordarme en este dispositivo</label>
       </div>
-      <button type="submit" className="btn btn--gold btn--block btn--lg">Entrar a mi cuenta</button>
+      <button type="submit" className="btn btn--gold btn--block btn--lg" disabled={loading}>
+        {loading ? "Entrando…" : "Entrar a mi cuenta"}
+      </button>
       <p className="modal__foot">
         ¿No tienes cuenta?{" "}
         <button type="button" className="linklike" onClick={() => onSwitch("register")}>Regístrate aquí</button>
@@ -282,13 +350,15 @@ function LoginForm({ onSwitch, onDone }) {
 }
 
 /* ---------- Registro ---------- */
-function RegisterForm({ onSwitch, onDone }) {
+function RegisterForm({ onSwitch }) {
   const [f, setF] = useState({ nombre: "", tel: "", email: "", pass: "" });
   const [accept, setAccept] = useState(false);
   const [errs, setErrs] = useState({});
+  const [apiErr, setApiErr] = useState(null);
+  const [loading, setLoading] = useState(false);
   const set = (k) => (v) => setF((s) => ({ ...s, [k]: v }));
 
-  function submit(e) {
+  async function submit(e) {
     e.preventDefault();
     const next = {};
     if (f.nombre.trim().length < 2) next.nombre = "Dinos tu nombre.";
@@ -297,11 +367,41 @@ function RegisterForm({ onSwitch, onDone }) {
     if (f.pass.length < 6) next.pass = "Mínimo 6 caracteres.";
     if (!accept) next.accept = "Debes aceptar para continuar.";
     setErrs(next);
-    if (Object.keys(next).length === 0) onDone("register", f.nombre.split(" ")[0]);
+    if (Object.keys(next).length > 0) return;
+
+    setApiErr(null);
+    setLoading(true);
+    try {
+      /* El backend de registro solo recibe { email, contrasena, nombres };
+         toda cuenta nueva nace como "cliente". */
+      const sesion = await authPost("/api/auth/registro", {
+        email: f.email,
+        contrasena: f.pass,
+        nombres: f.nombre.trim(),
+      });
+
+      /* Mejor esfuerzo: guardar el teléfono recién capturado.
+         Si falla, no bloquea el ingreso. */
+      if (f.tel && sesion.token && sesion.usuario && sesion.usuario._id) {
+        try {
+          await fetch(`${API.USUARIOS}/api/usuarios/${sesion.usuario._id}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${sesion.token}` },
+            body: JSON.stringify({ telefono: f.tel }),
+          });
+        } catch { /* opcional */ }
+      }
+
+      guardarSesionYRedirigir(sesion);   // cliente → dashboard.html
+    } catch (err) {
+      setApiErr(err.message);
+      setLoading(false);
+    }
   }
 
   return (
     <form className="modal__body" onSubmit={submit} noValidate>
+      <ApiError>{apiErr}</ApiError>
       <Field id="rg-nombre" label="Nombre completo" value={f.nombre}
         onChange={set("nombre")} error={errs.nombre} placeholder="Juan Pérez" autoComplete="name" />
       <Field id="rg-tel" label="Teléfono" type="tel" value={f.tel}
@@ -315,7 +415,9 @@ function RegisterForm({ onSwitch, onDone }) {
         <label htmlFor="accept">Acepto recibir recordatorios de mis citas</label>
       </div>
       {errs.accept ? <span className="field__err" style={{ marginTop: "-10px", display: "block", marginBottom: "12px" }}>{errs.accept}</span> : null}
-      <button type="submit" className="btn btn--gold btn--block btn--lg">Crear mi cuenta</button>
+      <button type="submit" className="btn btn--gold btn--block btn--lg" disabled={loading}>
+        {loading ? "Creando cuenta…" : "Crear mi cuenta"}
+      </button>
       <p className="modal__foot">
         ¿Ya eres cliente?{" "}
         <button type="button" className="linklike" onClick={() => onSwitch("login")}>Inicia sesión</button>
@@ -327,10 +429,19 @@ function RegisterForm({ onSwitch, onDone }) {
 /* ---------- Modal contenedor ---------- */
 function AuthModal() {
   const [view, setView] = useState(null); // 'login' | 'register' | null
-  const [done, setDone] = useState(null); // { kind, name }
 
-  const open = useCallback((v) => { setDone(null); setView(v); }, []);
-  const close = useCallback(() => { setView(null); setDone(null); }, []);
+  const open = useCallback((v) => setView(v), []);
+  const close = useCallback(() => setView(null), []);
+
+  /* Si ya hay sesión guardada, redirigir directo al panel del rol */
+  useEffect(() => {
+    const token = localStorage.getItem("bt_token");
+    let u = {};
+    try { u = JSON.parse(localStorage.getItem("bt_user") || "{}"); } catch { u = {}; }
+    if (token && u && u.tipoUsuario) {
+      window.location.replace(panelPorRol(u.tipoUsuario));
+    }
+  }, []);
 
   useEffect(() => {
     const handler = (e) => {
@@ -350,8 +461,10 @@ function AuthModal() {
   if (!view) return null;
 
   const isLogin = view === "login";
-  const titleText = done ? (done.kind === "register" ? "¡Listo!" : "Bienvenido") : (isLogin ? "Iniciar sesión" : "Registrarse");
-  const subText = done ? "" : (isLogin ? "Reserva y gestiona tus citas en Barbertime." : "Únete y agenda tu próximo corte en segundos.");
+  const titleText = isLogin ? "Iniciar sesión" : "Registrarse";
+  const subText = isLogin
+    ? "Reserva y gestiona tus citas en Barbertime."
+    : "Únete y agenda tu próximo corte en segundos.";
 
   return (
     <div className="overlay" onMouseDown={(e) => { if (e.target.classList.contains("overlay")) close(); }}>
@@ -360,27 +473,12 @@ function AuthModal() {
           <button className="modal__close" aria-label="Cerrar" onClick={close}>×</button>
           {pole}
           <h2 className="modal__title">{titleText}</h2>
-          {subText ? <p className="modal__sub">{subText}</p> : null}
+          <p className="modal__sub">{subText}</p>
         </div>
 
-        {done ? (
-          <div className="modal__body">
-            <div className="success">
-              <div className="success__check">✓</div>
-              <h3>{done.kind === "register" ? `Cuenta creada, ${done.name}` : `Hola de nuevo`}</h3>
-              <p>
-                {done.kind === "register"
-                  ? "Ya puedes reservar tu cita y recibir recordatorios. Te esperamos en la silla."
-                  : "Sesión iniciada correctamente. Reserva tu próximo corte cuando quieras."}
-              </p>
-              <button className="btn btn--solid-ink btn--block btn--lg" onClick={close}>Continuar</button>
-            </div>
-          </div>
-        ) : isLogin ? (
-          <LoginForm onSwitch={open} onDone={(kind, name) => setDone({ kind, name })} />
-        ) : (
-          <RegisterForm onSwitch={open} onDone={(kind, name) => setDone({ kind, name })} />
-        )}
+        {isLogin
+          ? <LoginForm onSwitch={open} />
+          : <RegisterForm onSwitch={open} />}
       </div>
     </div>
   );

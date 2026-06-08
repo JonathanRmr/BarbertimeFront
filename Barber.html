@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Barbertime — Agenda del barbero</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Oswald:wght@400;500;600&family=Lora:ital,wght@0,400;0,500;1,400&family=Pinyon+Script&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="barbertime.css" />
+<link rel="stylesheet" href="dashboard.css" />
+<link rel="stylesheet" href="barber.css" />
+</head>
+<body class="dash-body">
+
+<!-- ===================== NAV (barbero) ===================== -->
+<header class="nav">
+  <div class="wrap nav__inner">
+    <a href="Barbertime.html" class="brand">
+      <div class="barberpole brand__pole"></div>
+      <span class="brand__name">BARBER<b>TIME</b></span>
+    </a>
+    <nav class="nav__links nav__links--dash">
+      <span class="nav__greeting" id="nav-greeting">Barbero</span>
+      <button class="btn btn--ghost btn--sm" id="btn-logout">Cerrar sesión</button>
+    </nav>
+  </div>
+</header>
+
+<div id="barber-root"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
+
+<!-- ===== barber.jsx EN LÍNEA ===== -->
+<script type="text/babel" data-presets="react">
+/* global React, ReactDOM */
+const { useState, useEffect, useCallback } = React;
+
+/* ============================================================
+   CONFIGURACIÓN DE ENDPOINTS
+   ============================================================ */
+const API = {
+  CITAS: "http://localhost:4003",  // todas las rutas requieren token
+};
+
+/* ──────────── HELPERS ──────────── */
+function getToken() {
+  return localStorage.getItem("bt_token") || "";
+}
+function getUser() {
+  try { return JSON.parse(localStorage.getItem("bt_user") || "{}"); }
+  catch { return {}; }
+}
+
+async function apiFetch(url, options = {}) {
+  const token = getToken();
+  const res = await fetch(url, {
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(options.headers || {}),
+    },
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.mensaje || data.error || `Error ${res.status}`);
+  return data;
+}
+
+/* ──────────── FECHAS Y FORMATO ──────────── */
+function fmtPrice(n) {
+  return `$${Number(n || 0).toLocaleString("es-CO")}`;
+}
+function fmtHora(iso) {
+  return new Date(iso).toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit" });
+}
+/* "yyyy-mm-dd" del día local (para el input date) */
+function isoDia(d) {
+  const off = d.getTimezoneOffset();
+  return new Date(d.getTime() - off * 60000).toISOString().split("T")[0];
+}
+/* Rango ISO [00:00, 23:59:59] del día indicado (yyyy-mm-dd) */
+function rangoDia(diaStr) {
+  const desde = new Date(`${diaStr}T00:00:00`);
+  const hasta = new Date(`${diaStr}T23:59:59`);
+  return { desde: desde.toISOString(), hasta: hasta.toISOString() };
+}
+/* Etiqueta legible del día: "lunes, 8 de junio" */
+function etiquetaDia(diaStr) {
+  const d = new Date(`${diaStr}T12:00:00`);
+  return d.toLocaleDateString("es-CO", { weekday: "long", day: "numeric", month: "long" });
+}
+function refCliente(id) {
+  if (!id) return "Cliente";
+  return `Cliente · ${String(id).slice(-6)}`;
+}
+
+const STATUS_LABEL = {
+  pendiente:  "Pendiente",
+  confirmada: "Confirmada",
+  completada: "Hecha",
+  cancelada:  "No realizada",
+};
+function StatusPill({ estado }) {
+  return (
+    <span className={`status-pill status-pill--${estado}`}>
+      {STATUS_LABEL[estado] || estado}
+    </span>
+  );
+}
+
+/* ════════════════════════════════════════════════════════════
+   CONFIRMACIÓN: "No realizada"
+   ════════════════════════════════════════════════════════════ */
+function NoShowModal({ cita, onClose, onConfirm, loading }) {
+  const [motivo, setMotivo] = useState("");
+  return (
+    <div className="overlay" onMouseDown={(e) => { if (e.target.classList.contains("overlay")) onClose(); }}>
+      <div className="modal" role="dialog" aria-modal="true" style={{ maxWidth: 420 }}>
+        <div className="modal__top">
+          <button className="modal__close" aria-label="Cerrar" onClick={onClose}>×</button>
+          <h2 className="modal__title">Marcar como no realizada</h2>
+        </div>
+        <div className="modal__body">
+          <p style={{ marginTop: 0, fontSize: 15, color: "var(--ink-soft)", lineHeight: 1.6 }}>
+            <strong style={{ color: "var(--ink)" }}>{cita.nombreServicio}</strong> · {fmtHora(cita.fechaHora)}.
+            Esta cita pasará a estado «no realizada» y no podrá revertirse.
+          </p>
+          <div className="field">
+            <label htmlFor="ns-motivo">Motivo (opcional)</label>
+            <textarea
+              id="ns-motivo"
+              value={motivo}
+              onChange={(e) => setMotivo(e.target.value)}
+              placeholder="Ej: el cliente no se presentó…"
+              style={{ width: "100%", fontFamily: "var(--ff-body)", fontSize: 15, color: "var(--ink)", padding: "12px 14px", border: "1.5px solid var(--hair)", borderRadius: 9, background: "var(--cream)", resize: "vertical", minHeight: 70 }}
+            />
+          </div>
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            <button className="btn btn--danger btn--lg" disabled={loading} onClick={() => onConfirm(motivo.trim())}>
+              {loading ? "Guardando…" : "Confirmar"}
+            </button>
+            <button className="btn btn--ghost" onClick={onClose}
+              style={{ borderColor: "var(--hair)", color: "var(--ink-soft)" }}>
+              Volver
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ════════════════════════════════════════════════════════════
+   FILA DE LA AGENDA
+   ════════════════════════════════════════════════════════════ */
+function AgendaRow({ cita, busy, onHecha, onNoHecha }) {
+  const esFinal = cita.estado === "completada" || cita.estado === "cancelada";
+  const activa  = cita.estado === "pendiente" || cita.estado === "confirmada";
+
+  return (
+    <div className={`agenda-row agenda-row--${cita.estado}${esFinal ? " agenda-row--final" : ""}`}>
+      <div>
+        <div className="agenda-row__time">{fmtHora(cita.fechaHora)}</div>
+        <span className="agenda-row__dur">{cita.duracionMinutos} min</span>
+      </div>
+
+      <div>
+        <p className="agenda-row__service">{cita.nombreServicio}</p>
+        <div className="agenda-row__meta">
+          <span>{refCliente(cita.clienteId)}</span>
+          <span className="agenda-row__price">{fmtPrice(cita.precioServicio)}</span>
+        </div>
+        {cita.notas && <p className="agenda-row__notes">"{cita.notas}"</p>}
+        {cita.estado === "cancelada" && cita.motivoCancelacion && (
+          <p className="agenda-row__notes">Motivo: {cita.motivoCancelacion}</p>
+        )}
+      </div>
+
+      <div className="agenda-row__status">
+        <StatusPill estado={cita.estado} />
+        {activa && (
+          <div className="agenda-row__actions">
+            <button
+              className="btn btn--gold btn--xs"
+              disabled={busy}
+              onClick={() => onHecha(cita)}
+            >
+              {busy ? "…" : "Hecha"}
+            </button>
+            <button
+              className="btn btn--outline btn--xs"
+              disabled={busy}
+              onClick={() => onNoHecha(cita)}
+            >
+              No realizada
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ════════════════════════════════════════════════════════════
+   RAÍZ: agenda del barbero
+   ════════════════════════════════════════════════════════════ */
+function BarberAgenda() {
+  const user = getUser();
+  const barberoId = user._id || "";
+  const hayToken = !!getToken();
+
+  const [dia,     setDia]     = useState(isoDia(new Date())); // yyyy-mm-dd
+  const [citas,   setCitas]   = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error,   setError]   = useState(null);
+  const [msg,     setMsg]     = useState(null);   // { type, text }
+  const [busyId,  setBusyId]  = useState(null);   // id de cita en proceso
+  const [noShow,  setNoShow]  = useState(null);   // cita a marcar no realizada
+
+  /* Saludo + logout en el nav */
+  useEffect(() => {
+    const el = document.getElementById("nav-greeting");
+    if (el && user.nombres) el.textContent = `Barbero · ${user.nombres.split(" ")[0]}`;
+  }, [user.nombres]);
+  useEffect(() => {
+    const btn = document.getElementById("btn-logout");
+    if (!btn) return;
+    const handle = () => {
+      localStorage.removeItem("bt_token");
+      localStorage.removeItem("bt_user");
+      window.location.href = "Barbertime.html";
+    };
+    btn.addEventListener("click", handle);
+    return () => btn.removeEventListener("click", handle);
+  }, []);
+
+  const cargar = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    const { desde, hasta } = rangoDia(dia);
+    const p = new URLSearchParams();
+    if (barberoId) p.set("barberoId", barberoId);
+    p.set("desde", desde);
+    p.set("hasta", hasta);
+    p.set("limit", 100);
+    try {
+      const res = await apiFetch(`${API.CITAS}/api/citas?${p.toString()}`);
+      const lista = (res.data || []).sort(
+        (a, b) => new Date(a.fechaHora) - new Date(b.fechaHora)
+      );
+      setCitas(lista);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [dia, barberoId]);
+
+  useEffect(() => { cargar(); }, [cargar]);
+
+  /* Navegación de día */
+  function moverDia(delta) {
+    const d = new Date(`${dia}T12:00:00`);
+    d.setDate(d.getDate() + delta);
+    setDia(isoDia(d));
+  }
+  function hoy() { setDia(isoDia(new Date())); }
+
+  /* ── Marcar HECHA ──
+     completar solo aplica a citas confirmadas; si está pendiente,
+     primero la confirmo y luego la completo (encadenado). */
+  async function marcarHecha(cita) {
+    setMsg(null);
+    setBusyId(cita._id);
+    try {
+      if (cita.estado === "pendiente") {
+        await apiFetch(`${API.CITAS}/api/citas/${cita._id}/confirmar`, { method: "PATCH" });
+      }
+      await apiFetch(`${API.CITAS}/api/citas/${cita._id}/completar`, { method: "PATCH" });
+      setMsg({ type: "success", text: "Cita marcada como hecha." });
+      await cargar();
+    } catch (err) {
+      setMsg({ type: "error", text: err.message });
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  /* ── Marcar NO REALIZADA ── (cancelar) */
+  async function confirmarNoHecha(motivo) {
+    const cita = noShow;
+    setBusyId(cita._id);
+    try {
+      await apiFetch(`${API.CITAS}/api/citas/${cita._id}/cancelar`, {
+        method: "PATCH",
+        body: JSON.stringify({ motivoCancelacion: motivo || "No realizada" }),
+      });
+      setNoShow(null);
+      setMsg({ type: "success", text: "Cita marcada como no realizada." });
+      await cargar();
+    } catch (err) {
+      setMsg({ type: "error", text: err.message });
+      setNoShow(null);
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  return (
+    <>
+      <section className="dash-hero">
+        <div className="wrap dash-hero__inner">
+          <div className="dash-hero__copy">
+            <span className="dash-hero__eyebrow">Agenda</span>
+            <h1 className="dash-hero__title">MIS <span>CITAS</span></h1>
+            <p className="dash-hero__sub">Tu horario de citas reservadas. Marca cada una como hecha o no realizada.</p>
+          </div>
+          <div style={{ textAlign: "right", opacity: 0.6 }}>
+            <div className="barberpole" style={{ height: 80, display: "inline-block" }}></div>
+          </div>
+        </div>
+      </section>
+
+      <main className="dash-main">
+        <div className="wrap">
+          {!hayToken && (
+            <div className="msg msg--error">
+              No hay una sesión iniciada. Esta página necesita el token de un barbero para cargar la agenda.
+              Inicia sesión desde <a href="Barbertime.html" style={{ color: "var(--gold-deep)" }}>la página principal</a>.
+            </div>
+          )}
+
+          {/* Barra de día */}
+          <div className="agenda-daybar">
+            <div className="agenda-daybar__nav">
+              <button className="btn btn--outline btn--sm" onClick={() => moverDia(-1)}>‹ Día anterior</button>
+              <button className="btn btn--outline btn--sm" onClick={hoy}>Hoy</button>
+              <button className="btn btn--outline btn--sm" onClick={() => moverDia(1)}>Día siguiente ›</button>
+            </div>
+            <input
+              type="date"
+              value={dia}
+              onChange={(e) => setDia(e.target.value)}
+              aria-label="Elegir día"
+            />
+            <span className="agenda-daybar__label">{etiquetaDia(dia)}</span>
+            <span className="agenda-daybar__spacer" />
+            {!loading && !error && (
+              <span className="agenda-daybar__count">{citas.length} cita{citas.length === 1 ? "" : "s"}</span>
+            )}
+          </div>
+
+          {msg && <div className={`msg msg--${msg.type}`}>{msg.text}</div>}
+
+          {loading && <div className="spinner" />}
+          {error && <div className="msg msg--error">No se pudo cargar la agenda: {error}</div>}
+
+          {!loading && !error && citas.length === 0 && (
+            <div className="empty-state">
+              <p className="empty-state__title">Sin citas este día</p>
+              <p className="empty-state__sub">No tienes citas reservadas para {etiquetaDia(dia)}.</p>
+            </div>
+          )}
+
+          {!loading && !error && citas.length > 0 && (
+            <>
+              <div className="agenda">
+                {citas.map((cita) => (
+                  <AgendaRow
+                    key={cita._id}
+                    cita={cita}
+                    busy={busyId === cita._id}
+                    onHecha={marcarHecha}
+                    onNoHecha={(c) => { setMsg(null); setNoShow(c); }}
+                  />
+                ))}
+              </div>
+
+              <div className="agenda-legend">
+                <span><i className="pendiente" /> Pendiente</span>
+                <span><i className="confirmada" /> Confirmada</span>
+                <span><i className="completada" /> Hecha</span>
+                <span><i className="cancelada" /> No realizada</span>
+              </div>
+            </>
+          )}
+        </div>
+      </main>
+
+      {noShow && (
+        <NoShowModal
+          cita={noShow}
+          loading={busyId === noShow._id}
+          onClose={() => setNoShow(null)}
+          onConfirm={confirmarNoHecha}
+        />
+      )}
+    </>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("barber-root")).render(<BarberAgenda />);
+</script>
+
+</body>
+</html>
