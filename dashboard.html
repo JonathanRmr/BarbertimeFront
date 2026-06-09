@@ -240,9 +240,9 @@ function BookingPanel({ selectedSvc, onClearSvc, barbers, onBooked }) {
               <option value="">— Elige tu barbero —</option>
               {barbers.map((b) => (
                 <option key={b._id} value={b._id}>
-                    {b.nombreBarbero}
+                    {b.nombres}
                 </option>
-                ))}
+            ))}
             </select>
           </div>
 
@@ -297,6 +297,7 @@ function ServicesTab({ barbers, onBooked }) {
   const [loading,  setLoading]  = useState(true);
   const [error,    setError]    = useState(null);
   const [selected, setSelected] = useState(null);
+
 
   useEffect(() => {
     (async () => {
@@ -569,17 +570,18 @@ function Dashboard() {
     return () => btn.removeEventListener("click", handle);
   }, []);
 
-  useEffect(() => {
+  // DESPUÉS
+useEffect(() => {
     (async () => {
       try {
-        const res = await apiFetch(`${API.ADMIN}/api/admin/horarios/barberos/lista`);
-        setBarbers(res.data || []);
+        const res = await apiFetch(`${API.USUARIOS}/api/usuarios/barberos`);
+        const lista = res.data || [];
+        setBarbers(lista);
       } catch {
         setBarbers([]);
       }
     })();
   }, []);
-
   function onBooked() {
     setRefreshKey((k) => k + 1);
     setTab("citas");

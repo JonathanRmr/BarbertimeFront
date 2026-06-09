@@ -1568,7 +1568,8 @@ function HorariosTab() {
         const p = new URLSearchParams();
         p.set("tipoUsuario", "barbero");
         p.set("limite", "100");
-        const res = await apiFetch(`${API.ADMIN}/api/admin/horarios/barberos/lista`);
+        // DESPUÉS
+        const res = await apiFetch(`${API.USUARIOS}/api/usuarios/barberos`);
         const lista = res.data || [];
         setBarberos(lista);
         if (lista.length > 0) setBarberoActivo(lista[0]);
@@ -1611,14 +1612,15 @@ function HorariosTab() {
           {/* Sidebar: lista de barberos */}
           <nav className="hor-sidebar" aria-label="Barberos">
             <div className="hor-sidebar__title">Barberos</div>
+            // DESPUÉS
             {barberos.map((b) => (
-              <button
+            <button
                 key={b._id}
                 className={`hor-barbero-btn${barberoActivo?._id === b._id ? " hor-barbero-btn--active" : ""}`}
                 onClick={() => setBarberoActivo(b)}
-              >
-                {b.nombreBarbero}
-              </button>
+            >
+                {b.nombres}
+            </button>
             ))}
           </nav>
 
