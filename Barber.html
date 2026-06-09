@@ -42,9 +42,8 @@ const { useState, useEffect, useCallback } = React;
    CONFIGURACIÓN DE ENDPOINTS
    ============================================================ */
 const API = {
-  CITAS: "http://localhost:4003",  // todas las rutas requieren token
+  CITAS: "https://citas-mvyw.onrender.com",
 };
-
 /* ──────────── HELPERS ──────────── */
 function getToken() {
   return localStorage.getItem("bt_token") || "";
