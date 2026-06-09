@@ -10,6 +10,131 @@
 <link rel="stylesheet" href="barbertime.css" />
 <link rel="stylesheet" href="dashboard.css" />
 <link rel="stylesheet" href="admin.css" />
+
+<style>
+/* ── Horarios: grid de días ── */
+.hor-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 14px;
+  margin-top: 4px;
+}
+.hor-card {
+  border: 1.5px solid var(--hair);
+  border-radius: 12px;
+  background: var(--cream);
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  transition: border-color 0.15s;
+}
+.hor-card:hover { border-color: var(--gold); }
+.hor-card--inactivo { opacity: 0.55; }
+.hor-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.hor-card__dia {
+  font-family: var(--ff-display);
+  font-size: 17px;
+  letter-spacing: .04em;
+  color: var(--ink);
+  text-transform: uppercase;
+}
+.hor-card__horas {
+  font-size: 14px;
+  color: var(--ink-soft);
+}
+.hor-card__horas strong { color: var(--ink); }
+.hor-card__descansos {
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+.hor-card__actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+/* ── Selector de barbero (barra lateral izquierda) ── */
+.hor-layout {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  gap: 24px;
+  align-items: start;
+}
+@media (max-width: 700px) {
+  .hor-layout { grid-template-columns: 1fr; }
+}
+.hor-sidebar {
+  border: 1.5px solid var(--hair);
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--cream);
+}
+.hor-sidebar__title {
+  padding: 12px 14px;
+  font-family: var(--ff-display);
+  font-size: 13px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  border-bottom: 1px solid var(--hair);
+  background: var(--cream-2);
+}
+.hor-barbero-btn {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--hair);
+  padding: 11px 14px;
+  font-family: var(--ff-body);
+  font-size: 14px;
+  color: var(--ink);
+  cursor: pointer;
+  transition: background 0.12s;
+}
+.hor-barbero-btn:last-child { border-bottom: none; }
+.hor-barbero-btn:hover { background: var(--cream-2); }
+.hor-barbero-btn--active {
+  background: var(--gold) !important;
+  color: #fff;
+  font-weight: 600;
+}
+
+/* ── Modal de horario: descansos ── */
+.descanso-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 6px;
+}
+.descanso-row input {
+  padding: 9px 10px;
+  border: 1.5px solid var(--hair);
+  border-radius: 8px;
+  font-family: var(--ff-body);
+  font-size: 14px;
+  background: var(--cream);
+  color: var(--ink);
+  width: 100%;
+}
+.descanso-remove {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--danger, #c0392b);
+  font-size: 18px;
+  line-height: 1;
+  padding: 2px 4px;
+}
+</style>
 </head>
 <body class="dash-body">
 
@@ -42,8 +167,9 @@ const { useState, useEffect, useCallback } = React;
    CONFIGURACIÓN DE ENDPOINTS
    ============================================================ */
 const API = {
-  USUARIOS: "http://localhost:5000",  // gestión de usuarios
-  ADMIN:    "http://localhost:4004",  // estadísticas (todas requieren token admin)
+  USUARIOS:  "http://localhost:5000",
+  SERVICIOS: "http://localhost:4002",
+  ADMIN:     "http://localhost:4004",
 };
 
 /* ──────────── HELPERS ──────────── */
@@ -89,7 +215,6 @@ function nombreCompleto(u) {
   return [u.nombres, u.apellido].filter(Boolean).join(" ") || "(sin nombre)";
 }
 
-/* Construye query string ?desde=...&hasta=... ignorando vacíos */
 function rangoQuery(desde, hasta) {
   const p = new URLSearchParams();
   if (desde) p.set("desde", new Date(desde + "T00:00:00").toISOString());
@@ -104,21 +229,20 @@ function rangoQuery(desde, hasta) {
 function EstadisticasTab() {
   const [desde, setDesde] = useState("");
   const [hasta, setHasta] = useState("");
-  const [rango, setRango] = useState({ desde: "", hasta: "" }); // aplicado
+  const [rango, setRango] = useState({ desde: "", hasta: "" });
 
-  const [resumen,     setResumen]     = useState(null);
-  const [porOrigen,   setPorOrigen]   = useState([]);
+  const [resumen,      setResumen]      = useState(null);
+  const [porOrigen,    setPorOrigen]    = useState([]);
   const [porCategoria, setPorCategoria] = useState([]);
-  const [barberos,    setBarberos]    = useState([]);
-  const [loading,     setLoading]     = useState(true);
-  const [error,       setError]       = useState(null);
+  const [barberos,     setBarberos]     = useState([]);
+  const [loading,      setLoading]      = useState(true);
+  const [error,        setError]        = useState(null);
 
   const cargar = useCallback(async () => {
     setLoading(true);
     setError(null);
     const q = rangoQuery(rango.desde, rango.hasta);
     try {
-      /* Las cuatro consultas en paralelo. Si una falla, no tumba al resto. */
       const [r, o, c, b] = await Promise.allSettled([
         apiFetch(`${API.ADMIN}/api/admin/estadisticas/resumen${q}`),
         apiFetch(`${API.ADMIN}/api/admin/estadisticas/ingresos-por-origen${q}`),
@@ -127,7 +251,7 @@ function EstadisticasTab() {
       ]);
 
       if (r.status === "fulfilled") setResumen(r.value.data || r.value);
-      else throw r.reason; // el resumen es el dato base; si falla, mostramos error
+      else throw r.reason;
 
       setPorOrigen(o.status === "fulfilled" ? (o.value.data || o.value || []) : []);
       setPorCategoria(c.status === "fulfilled" ? (c.value.data || c.value || []) : []);
@@ -151,7 +275,6 @@ function EstadisticasTab() {
         <p>Resumen financiero del periodo seleccionado. Deja las fechas vacías para ver todo el histórico.</p>
       </div>
 
-      {/* Filtros de fecha */}
       <div className="admin-toolbar">
         <div className="admin-filter">
           <label htmlFor="est-desde">Desde</label>
@@ -172,7 +295,6 @@ function EstadisticasTab() {
 
       {!loading && !error && resumen && (
         <>
-          {/* Franja resumen (libro contable, no card) */}
           <div className="ledger">
             <div className="ledger__item">
               <div className="ledger__k">Dinero ingresado</div>
@@ -191,7 +313,6 @@ function EstadisticasTab() {
             </div>
           </div>
 
-          {/* Ingresos por origen */}
           <div className="admin-block">
             <h3 className="admin-block__title">Ingresos por origen</h3>
             {porOrigen.length === 0 ? (
@@ -218,7 +339,6 @@ function EstadisticasTab() {
             )}
           </div>
 
-          {/* Gastos por categoría */}
           <div className="admin-block">
             <h3 className="admin-block__title">Gastos por categoría</h3>
             {porCategoria.length === 0 ? (
@@ -245,7 +365,6 @@ function EstadisticasTab() {
             )}
           </div>
 
-          {/* Rendimiento por barbero */}
           <div className="admin-block">
             <h3 className="admin-block__title">Rendimiento por barbero</h3>
             {barberos.length === 0 ? (
@@ -308,7 +427,6 @@ function EditUserModal({ usuario, onClose, onSaved }) {
     setError(null);
     setLoading(true);
     try {
-      /* 1) Datos de perfil → PUT /api/usuarios/:id */
       await apiFetch(`${API.USUARIOS}/api/usuarios/${usuario._id}`, {
         method: "PUT",
         body: JSON.stringify({
@@ -319,15 +437,12 @@ function EditUserModal({ usuario, onClose, onSaved }) {
           edad:     f.edad === "" ? undefined : Number(f.edad),
         }),
       });
-
-      /* 2) Si cambió el rol → PATCH /api/usuarios/:id/rol */
       if (rol !== usuario.tipoUsuario) {
         await apiFetch(`${API.USUARIOS}/api/usuarios/${usuario._id}/rol`, {
           method: "PATCH",
           body: JSON.stringify({ tipoUsuario: rol }),
         });
       }
-
       onSaved();
     } catch (err) {
       setError(err.message);
@@ -347,7 +462,6 @@ function EditUserModal({ usuario, onClose, onSaved }) {
         </div>
         <div className="modal__body">
           {error && <div className="msg msg--error">{error}</div>}
-
           <div className="edit-grid">
             <div className="field">
               <label htmlFor="eu-nombres">Nombres</label>
@@ -377,7 +491,6 @@ function EditUserModal({ usuario, onClose, onSaved }) {
               </select>
             </div>
           </div>
-
           <div style={{ display: "flex", gap: 10, marginTop: 8, flexWrap: "wrap" }}>
             <button className="btn btn--gold btn--lg" onClick={guardar} disabled={loading}>
               {loading ? "Guardando…" : "Guardar cambios"}
@@ -393,7 +506,6 @@ function EditUserModal({ usuario, onClose, onSaved }) {
   );
 }
 
-/* ──────────── Modal de confirmación de borrado ──────────── */
 function DeleteUserModal({ usuario, onClose, onDeleted }) {
   const [loading, setLoading] = useState(false);
   const [error,   setError]   = useState(null);
@@ -477,7 +589,6 @@ function UsuariosTab() {
 
   useEffect(() => { cargar(); }, [cargar]);
 
-  /* Al cambiar filtros, volver a página 1 */
   function cambiarTipo(v)   { setPagina(1); setTipo(v); }
   function cambiarEstado(v) { setPagina(1); setEstado(v); }
 
@@ -592,6 +703,938 @@ function UsuariosTab() {
   );
 }
 
+/* ────────────────────────────────────────────────────────────
+   Utilidades de estilo compartidas
+   ──────────────────────────────────────────────────────────── */
+const ctlStyle = {
+  width: "100%",
+  fontFamily: "var(--ff-body)",
+  fontSize: 16,
+  color: "var(--ink)",
+  padding: "13px 14px",
+  border: "1.5px solid var(--hair)",
+  borderRadius: 9,
+  background: "var(--cream)",
+  appearance: "none",
+};
+
+function TagActivo({ activo }) {
+  return activo
+    ? <span className="tag tag--activo">Activo</span>
+    : <span className="tag tag--inactivo">Inactivo</span>;
+}
+
+function ConfirmDeleteModal({ titulo, nombre, detalle, onClose, onConfirm }) {
+  const [loading, setLoading] = useState(false);
+  const [error,   setError]   = useState(null);
+
+  async function confirmar() {
+    setError(null);
+    setLoading(true);
+    try {
+      await onConfirm();
+    } catch (err) {
+      setError(err.message);
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="overlay" onMouseDown={(e) => { if (e.target.classList.contains("overlay")) onClose(); }}>
+      <div className="modal" role="dialog" aria-modal="true" style={{ maxWidth: 420 }}>
+        <div className="modal__top">
+          <button className="modal__close" aria-label="Cerrar" onClick={onClose}>×</button>
+          <h2 className="modal__title">{titulo}</h2>
+        </div>
+        <div className="modal__body">
+          {error && <div className="msg msg--error">{error}</div>}
+          <p style={{ fontSize: 15, color: "var(--ink-soft)", lineHeight: 1.6, marginTop: 0 }}>
+            Vas a eliminar <strong style={{ color: "var(--ink)" }}>{nombre}</strong>{detalle ? ` (${detalle})` : ""}.
+            Esta acción no se puede deshacer.
+          </p>
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            <button className="btn btn--danger btn--lg" onClick={confirmar} disabled={loading}>
+              {loading ? "Eliminando…" : "Sí, eliminar"}
+            </button>
+            <button className="btn btn--ghost" onClick={onClose}
+              style={{ borderColor: "var(--hair)", color: "var(--ink-soft)" }}>
+              Volver
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ════════════════════════════════════════════════════════════
+   SERVICIOS (CRUD)
+   ════════════════════════════════════════════════════════════ */
+function ServicioModal({ servicio, onClose, onSaved }) {
+  const esNuevo = !servicio._id;
+  const [f, setF] = useState({
+    nombre:          servicio.nombre || "",
+    descripcion:     servicio.descripcion || "",
+    precio:          servicio.precio ?? "",
+    duracionMinutos: servicio.duracionMinutos ?? "",
+    categoria:       servicio.categoria || "",
+    imagen:          servicio.imagen || "",
+    activo:          servicio.activo !== false,
+  });
+  const [loading, setLoading] = useState(false);
+  const [error,   setError]   = useState(null);
+
+  const set = (k) => (e) => setF((s) => ({ ...s, [k]: e.target.value }));
+
+  async function guardar() {
+    setError(null);
+    if (!f.nombre.trim()) return setError("El nombre es obligatorio.");
+    if (f.precio === "" || Number(f.precio) < 0) return setError("Indica un precio válido.");
+    if (f.duracionMinutos === "" || Number(f.duracionMinutos) <= 0) return setError("Indica una duración válida (minutos).");
+
+    setLoading(true);
+    try {
+      const body = {
+        nombre:          f.nombre.trim(),
+        descripcion:     f.descripcion.trim() || undefined,
+        precio:          Number(f.precio),
+        duracionMinutos: Number(f.duracionMinutos),
+        categoria:       f.categoria.trim() || undefined,
+        imagen:          f.imagen.trim() || undefined,
+        activo:          !!f.activo,
+      };
+      if (esNuevo) {
+        await apiFetch(`${API.SERVICIOS}/api/servicios`, { method: "POST", body: JSON.stringify(body) });
+      } else {
+        await apiFetch(`${API.SERVICIOS}/api/servicios/${servicio._id}`, { method: "PUT", body: JSON.stringify(body) });
+      }
+      onSaved();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="overlay" onMouseDown={(e) => { if (e.target.classList.contains("overlay")) onClose(); }}>
+      <div className="modal" role="dialog" aria-modal="true" style={{ maxWidth: 540 }}>
+        <div className="modal__top">
+          <button className="modal__close" aria-label="Cerrar" onClick={onClose}>×</button>
+          <div className="barberpole modal__pole"></div>
+          <h2 className="modal__title">{esNuevo ? "Nuevo servicio" : "Editar servicio"}</h2>
+          <p className="modal__sub">{esNuevo ? "Agrega un servicio al catálogo" : servicio.nombre}</p>
+        </div>
+        <div className="modal__body">
+          {error && <div className="msg msg--error">{error}</div>}
+          <div className="edit-grid">
+            <div className="field field--full">
+              <label htmlFor="sv-nombre">Nombre</label>
+              <input id="sv-nombre" value={f.nombre} onChange={set("nombre")} placeholder="Ej: Corte clásico" />
+            </div>
+            <div className="field field--full">
+              <label htmlFor="sv-desc">Descripción</label>
+              <textarea id="sv-desc" value={f.descripcion} onChange={set("descripcion")}
+                placeholder="Tijera y máquina, lavado y peinado…"
+                style={{ ...ctlStyle, fontSize: 15, resize: "vertical", minHeight: 70 }} />
+            </div>
+            <div className="field">
+              <label htmlFor="sv-precio">Precio (COP)</label>
+              <input id="sv-precio" type="number" min="0" step="500" value={f.precio} onChange={set("precio")} placeholder="25000" />
+            </div>
+            <div className="field">
+              <label htmlFor="sv-dur">Duración (min)</label>
+              <input id="sv-dur" type="number" min="1" value={f.duracionMinutos} onChange={set("duracionMinutos")} placeholder="30" />
+            </div>
+            <div className="field">
+              <label htmlFor="sv-cat">Categoría</label>
+              <input id="sv-cat" value={f.categoria} onChange={set("categoria")} placeholder="Cortes, Barba…" />
+            </div>
+            <div className="field">
+              <label htmlFor="sv-activo">Estado</label>
+              <select id="sv-activo" value={f.activo ? "si" : "no"}
+                onChange={(e) => setF((s) => ({ ...s, activo: e.target.value === "si" }))}
+                style={ctlStyle}>
+                <option value="si">Activo</option>
+                <option value="no">Inactivo</option>
+              </select>
+            </div>
+            <div className="field field--full">
+              <label htmlFor="sv-img">Imagen (URL, opcional)</label>
+              <input id="sv-img" value={f.imagen} onChange={set("imagen")} placeholder="https://…" />
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 10, marginTop: 8, flexWrap: "wrap" }}>
+            <button className="btn btn--gold btn--lg" onClick={guardar} disabled={loading}>
+              {loading ? "Guardando…" : (esNuevo ? "Crear servicio" : "Guardar cambios")}
+            </button>
+            <button className="btn btn--ghost" onClick={onClose}
+              style={{ borderColor: "var(--hair)", color: "var(--ink-soft)" }}>
+              Cancelar
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ServiciosTab() {
+  const [estado, setEstado] = useState("");
+  const [pagina, setPagina] = useState(1);
+  const limit = 10;
+
+  const [items,   setItems]   = useState([]);
+  const [pag,     setPag]     = useState({ page: 1, totalPaginas: 1, total: 0 });
+  const [loading, setLoading] = useState(true);
+  const [error,   setError]   = useState(null);
+
+  const [editing,  setEditing]  = useState(null);
+  const [deleting, setDeleting] = useState(null);
+
+  const cargar = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    const p = new URLSearchParams();
+    p.set("page", pagina);
+    p.set("limit", limit);
+    if (estado) p.set("activo", estado);
+    try {
+      const res = await apiFetch(`${API.SERVICIOS}/api/servicios?${p.toString()}`);
+      setItems(res.data || []);
+      setPag(res.paginacion || { page: 1, totalPaginas: 1, total: (res.data || []).length });
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [estado, pagina]);
+
+  useEffect(() => { cargar(); }, [cargar]);
+
+  return (
+    <div>
+      <div className="dash-section-head">
+        <h2>Servicios</h2>
+        <p>Catálogo de cortes y arreglos que ven los clientes al reservar.</p>
+      </div>
+      <div className="admin-toolbar">
+        <div className="admin-filter">
+          <label htmlFor="sv-estado">Estado</label>
+          <select id="sv-estado" value={estado} onChange={(e) => { setPagina(1); setEstado(e.target.value); }}>
+            <option value="">Todos</option>
+            <option value="true">Activos</option>
+            <option value="false">Inactivos</option>
+          </select>
+        </div>
+        <div className="admin-toolbar__actions">
+          <button className="btn btn--gold btn--sm" onClick={() => setEditing({})}>+ Nuevo servicio</button>
+        </div>
+      </div>
+
+      {loading && <div className="spinner" />}
+      {error && <div className="msg msg--error">No se pudieron cargar los servicios: {error}</div>}
+      {!loading && !error && items.length === 0 && (
+        <div className="empty-state">
+          <p className="empty-state__title">Sin servicios</p>
+          <p className="empty-state__sub">Crea el primero con «Nuevo servicio».</p>
+        </div>
+      )}
+
+      {!loading && !error && items.length > 0 && (
+        <>
+          <div className="admin-table-wrap">
+            <table className="admin-table">
+              <thead>
+                <tr>
+                  <th>Servicio</th><th>Categoría</th>
+                  <th className="num">Duración</th><th className="num">Precio</th>
+                  <th>Estado</th><th style={{ textAlign:"right" }}>Acciones</th>
+                </tr>
+              </thead>
+              <tbody>
+                {items.map((s) => (
+                  <tr key={s._id}>
+                    <td>
+                      <div className="admin-table__name">{s.nombre}</div>
+                      {s.descripcion && <div className="admin-table__email">{s.descripcion}</div>}
+                    </td>
+                    <td>{s.categoria || "—"}</td>
+                    <td className="num">{Number(s.duracionMinutos || 0)} min</td>
+                    <td className="money">{fmtPrice(s.precio)}</td>
+                    <td><TagActivo activo={s.activo !== false} /></td>
+                    <td>
+                      <div className="admin-table__actions">
+                        <button className="btn btn--outline btn--xs" onClick={() => setEditing(s)}>Editar</button>
+                        <button className="btn btn--danger btn--xs" onClick={() => setDeleting(s)}>Eliminar</button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="admin-pager">
+            <button className="btn btn--outline btn--sm" disabled={pagina <= 1}
+              onClick={() => setPagina((n) => Math.max(1, n - 1))}>Anterior</button>
+            <span className="admin-pager__info">
+              Página {pag.page || pagina} de {pag.totalPaginas || 1} · {pag.total || items.length} servicios
+            </span>
+            <button className="btn btn--outline btn--sm"
+              disabled={(pag.page || pagina) >= (pag.totalPaginas || 1)}
+              onClick={() => setPagina((n) => n + 1)}>Siguiente</button>
+          </div>
+        </>
+      )}
+
+      {editing && (
+        <ServicioModal servicio={editing} onClose={() => setEditing(null)}
+          onSaved={() => { setEditing(null); cargar(); }} />
+      )}
+      {deleting && (
+        <ConfirmDeleteModal titulo="Eliminar servicio" nombre={deleting.nombre}
+          detalle={fmtPrice(deleting.precio)} onClose={() => setDeleting(null)}
+          onConfirm={async () => {
+            await apiFetch(`${API.SERVICIOS}/api/servicios/${deleting._id}`, { method: "DELETE" });
+            setDeleting(null); cargar();
+          }} />
+      )}
+    </div>
+  );
+}
+
+/* ════════════════════════════════════════════════════════════
+   PRODUCTOS (CRUD)
+   ════════════════════════════════════════════════════════════ */
+function ProductoModal({ producto, onClose, onSaved }) {
+  const esNuevo = !producto._id;
+  const [f, setF] = useState({
+    nombre:      producto.nombre || "",
+    descripcion: producto.descripcion || "",
+    precio:      producto.precio ?? "",
+    stock:       producto.stock ?? "",
+    marca:       producto.marca || "",
+    categoria:   producto.categoria || "",
+    imagen:      producto.imagen || "",
+    activo:      producto.activo !== false,
+  });
+  const [loading, setLoading] = useState(false);
+  const [error,   setError]   = useState(null);
+
+  const set = (k) => (e) => setF((s) => ({ ...s, [k]: e.target.value }));
+
+  async function guardar() {
+    setError(null);
+    if (!f.nombre.trim()) return setError("El nombre es obligatorio.");
+    if (f.precio === "" || Number(f.precio) < 0) return setError("Indica un precio válido.");
+    if (f.stock === "" || Number(f.stock) < 0) return setError("Indica un stock válido.");
+
+    setLoading(true);
+    try {
+      const body = {
+        nombre:      f.nombre.trim(),
+        descripcion: f.descripcion.trim() || undefined,
+        precio:      Number(f.precio),
+        stock:       Number(f.stock),
+        marca:       f.marca.trim() || undefined,
+        categoria:   f.categoria.trim() || undefined,
+        imagen:      f.imagen.trim() || undefined,
+        activo:      !!f.activo,
+      };
+      if (esNuevo) {
+        await apiFetch(`${API.ADMIN}/api/admin/productos`, { method: "POST", body: JSON.stringify(body) });
+      } else {
+        await apiFetch(`${API.ADMIN}/api/admin/productos/${producto._id}`, { method: "PUT", body: JSON.stringify(body) });
+      }
+      onSaved();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="overlay" onMouseDown={(e) => { if (e.target.classList.contains("overlay")) onClose(); }}>
+      <div className="modal" role="dialog" aria-modal="true" style={{ maxWidth: 540 }}>
+        <div className="modal__top">
+          <button className="modal__close" aria-label="Cerrar" onClick={onClose}>×</button>
+          <div className="barberpole modal__pole"></div>
+          <h2 className="modal__title">{esNuevo ? "Nuevo producto" : "Editar producto"}</h2>
+          <p className="modal__sub">{esNuevo ? "Agrega un producto al inventario" : producto.nombre}</p>
+        </div>
+        <div className="modal__body">
+          {error && <div className="msg msg--error">{error}</div>}
+          <div className="edit-grid">
+            <div className="field field--full">
+              <label htmlFor="pr-nombre">Nombre</label>
+              <input id="pr-nombre" value={f.nombre} onChange={set("nombre")} placeholder="Ej: Cera mate" />
+            </div>
+            <div className="field field--full">
+              <label htmlFor="pr-desc">Descripción</label>
+              <textarea id="pr-desc" value={f.descripcion} onChange={set("descripcion")}
+                placeholder="Fijación fuerte, acabado mate…"
+                style={{ ...ctlStyle, fontSize: 15, resize: "vertical", minHeight: 70 }} />
+            </div>
+            <div className="field">
+              <label htmlFor="pr-precio">Precio (COP)</label>
+              <input id="pr-precio" type="number" min="0" step="500" value={f.precio} onChange={set("precio")} placeholder="18000" />
+            </div>
+            <div className="field">
+              <label htmlFor="pr-stock">Stock</label>
+              <input id="pr-stock" type="number" min="0" value={f.stock} onChange={set("stock")} placeholder="12" />
+            </div>
+            <div className="field">
+              <label htmlFor="pr-marca">Marca</label>
+              <input id="pr-marca" value={f.marca} onChange={set("marca")} placeholder="Opcional" />
+            </div>
+            <div className="field">
+              <label htmlFor="pr-cat">Categoría</label>
+              <input id="pr-cat" value={f.categoria} onChange={set("categoria")} placeholder="Ceras, Shampoo…" />
+            </div>
+            <div className="field">
+              <label htmlFor="pr-activo">Estado</label>
+              <select id="pr-activo" value={f.activo ? "si" : "no"}
+                onChange={(e) => setF((s) => ({ ...s, activo: e.target.value === "si" }))}
+                style={ctlStyle}>
+                <option value="si">Activo</option>
+                <option value="no">Inactivo</option>
+              </select>
+            </div>
+            <div className="field field--full">
+              <label htmlFor="pr-img">Imagen (URL, opcional)</label>
+              <input id="pr-img" value={f.imagen} onChange={set("imagen")} placeholder="https://…" />
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 10, marginTop: 8, flexWrap: "wrap" }}>
+            <button className="btn btn--gold btn--lg" onClick={guardar} disabled={loading}>
+              {loading ? "Guardando…" : (esNuevo ? "Crear producto" : "Guardar cambios")}
+            </button>
+            <button className="btn btn--ghost" onClick={onClose}
+              style={{ borderColor: "var(--hair)", color: "var(--ink-soft)" }}>
+              Cancelar
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ProductosTab() {
+  const [estado, setEstado] = useState("");
+  const [pagina, setPagina] = useState(1);
+  const limit = 10;
+
+  const [items,   setItems]   = useState([]);
+  const [pag,     setPag]     = useState({ page: 1, totalPaginas: 1, total: 0 });
+  const [loading, setLoading] = useState(true);
+  const [error,   setError]   = useState(null);
+
+  const [editing,  setEditing]  = useState(null);
+  const [deleting, setDeleting] = useState(null);
+
+  const cargar = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    const p = new URLSearchParams();
+    p.set("page", pagina);
+    p.set("limit", limit);
+    if (estado) p.set("activo", estado);
+    try {
+      const res = await apiFetch(`${API.ADMIN}/api/admin/productos?${p.toString()}`);
+      setItems(res.data || []);
+      setPag(res.paginacion || { page: 1, totalPaginas: 1, total: (res.data || []).length });
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [estado, pagina]);
+
+  useEffect(() => { cargar(); }, [cargar]);
+
+  return (
+    <div>
+      <div className="dash-section-head">
+        <h2>Productos</h2>
+        <p>Inventario de la barbería (ceras, shampoo, aceites…). Gestiona precios y stock.</p>
+      </div>
+      <div className="admin-toolbar">
+        <div className="admin-filter">
+          <label htmlFor="prods-estado">Estado</label>
+          <select id="prods-estado" value={estado} onChange={(e) => { setPagina(1); setEstado(e.target.value); }}>
+            <option value="">Todos</option>
+            <option value="true">Activos</option>
+            <option value="false">Inactivos</option>
+          </select>
+        </div>
+        <div className="admin-toolbar__actions">
+          <button className="btn btn--gold btn--sm" onClick={() => setEditing({})}>+ Nuevo producto</button>
+        </div>
+      </div>
+
+      {loading && <div className="spinner" />}
+      {error && <div className="msg msg--error">No se pudieron cargar los productos: {error}</div>}
+      {!loading && !error && items.length === 0 && (
+        <div className="empty-state">
+          <p className="empty-state__title">Sin productos</p>
+          <p className="empty-state__sub">Crea el primero con «Nuevo producto».</p>
+        </div>
+      )}
+
+      {!loading && !error && items.length > 0 && (
+        <>
+          <div className="admin-table-wrap">
+            <table className="admin-table">
+              <thead>
+                <tr>
+                  <th>Producto</th><th>Marca</th><th>Categoría</th>
+                  <th className="num">Stock</th><th className="num">Precio</th>
+                  <th>Estado</th><th style={{ textAlign:"right" }}>Acciones</th>
+                </tr>
+              </thead>
+              <tbody>
+                {items.map((p) => (
+                  <tr key={p._id}>
+                    <td>
+                      <div className="admin-table__name">{p.nombre}</div>
+                      {p.descripcion && <div className="admin-table__email">{p.descripcion}</div>}
+                    </td>
+                    <td>{p.marca || "—"}</td>
+                    <td>{p.categoria || "—"}</td>
+                    <td className="num">{Number(p.stock || 0)}</td>
+                    <td className="money">{fmtPrice(p.precio)}</td>
+                    <td><TagActivo activo={p.activo !== false} /></td>
+                    <td>
+                      <div className="admin-table__actions">
+                        <button className="btn btn--outline btn--xs" onClick={() => setEditing(p)}>Editar</button>
+                        <button className="btn btn--danger btn--xs" onClick={() => setDeleting(p)}>Eliminar</button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="admin-pager">
+            <button className="btn btn--outline btn--sm" disabled={pagina <= 1}
+              onClick={() => setPagina((n) => Math.max(1, n - 1))}>Anterior</button>
+            <span className="admin-pager__info">
+              Página {pag.page || pagina} de {pag.totalPaginas || 1} · {pag.total || items.length} productos
+            </span>
+            <button className="btn btn--outline btn--sm"
+              disabled={(pag.page || pagina) >= (pag.totalPaginas || 1)}
+              onClick={() => setPagina((n) => n + 1)}>Siguiente</button>
+          </div>
+        </>
+      )}
+
+      {editing && (
+        <ProductoModal producto={editing} onClose={() => setEditing(null)}
+          onSaved={() => { setEditing(null); cargar(); }} />
+      )}
+      {deleting && (
+        <ConfirmDeleteModal titulo="Eliminar producto" nombre={deleting.nombre}
+          detalle={fmtPrice(deleting.precio)} onClose={() => setDeleting(null)}
+          onConfirm={async () => {
+            await apiFetch(`${API.ADMIN}/api/admin/productos/${deleting._id}`, { method: "DELETE" });
+            setDeleting(null); cargar();
+          }} />
+      )}
+    </div>
+  );
+}
+
+/* ════════════════════════════════════════════════════════════
+   HORARIOS DE BARBEROS — NUEVO TAB
+   ════════════════════════════════════════════════════════════ */
+
+const DIAS = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
+
+/* ── Modal crear / editar un horario de barbero ── */
+function HorarioModal({ horario, barberoId, nombreBarbero, onClose, onSaved }) {
+  const esNuevo = !horario._id;
+
+  const [f, setF] = useState({
+    diaSemana:  horario.diaSemana ?? "",
+    horaInicio: horario.horaInicio || "",
+    horaFin:    horario.horaFin || "",
+    activo:     horario.activo !== false,
+    descansos:  horario.descansos
+      ? horario.descansos.map((d) => ({ inicio: d.inicio, fin: d.fin }))
+      : [],
+  });
+  const [loading, setLoading] = useState(false);
+  const [error,   setError]   = useState(null);
+
+  const set = (k) => (e) => setF((s) => ({ ...s, [k]: e.target.value }));
+
+  /* descansos */
+  function agregarDescanso() {
+    setF((s) => ({ ...s, descansos: [...s.descansos, { inicio: "", fin: "" }] }));
+  }
+  function quitarDescanso(i) {
+    setF((s) => ({ ...s, descansos: s.descansos.filter((_, idx) => idx !== i) }));
+  }
+  function setDescanso(i, campo, val) {
+    setF((s) => {
+      const ds = [...s.descansos];
+      ds[i] = { ...ds[i], [campo]: val };
+      return { ...s, descansos: ds };
+    });
+  }
+
+  async function guardar() {
+    setError(null);
+    if (f.diaSemana === "") return setError("Selecciona un día de la semana.");
+    if (!f.horaInicio)      return setError("La hora de inicio es obligatoria.");
+    if (!f.horaFin)         return setError("La hora de fin es obligatoria.");
+    for (const [i, d] of f.descansos.entries()) {
+      if (!d.inicio || !d.fin)
+        return setError(`Completa las horas del descanso ${i + 1}.`);
+    }
+
+    setLoading(true);
+    try {
+      const body = {
+        barberoId,
+        nombreBarbero,
+        diaSemana:  Number(f.diaSemana),
+        horaInicio: f.horaInicio,
+        horaFin:    f.horaFin,
+        activo:     f.activo,
+        descansos:  f.descansos,
+      };
+      if (esNuevo) {
+        await apiFetch(`${API.ADMIN}/api/admin/horarios/barberos`, {
+          method: "POST", body: JSON.stringify(body),
+        });
+      } else {
+        await apiFetch(`${API.ADMIN}/api/admin/horarios/barberos/${horario._id}`, {
+          method: "PUT", body: JSON.stringify(body),
+        });
+      }
+      onSaved();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  /* días ya cubiertos por este barbero (no permitir duplicados en creación) */
+  return (
+    <div className="overlay" onMouseDown={(e) => { if (e.target.classList.contains("overlay")) onClose(); }}>
+      <div className="modal" role="dialog" aria-modal="true" style={{ maxWidth: 500 }}>
+        <div className="modal__top">
+          <button className="modal__close" aria-label="Cerrar" onClick={onClose}>×</button>
+          <div className="barberpole modal__pole"></div>
+          <h2 className="modal__title">
+            {esNuevo ? "Agregar horario" : "Editar horario"}
+          </h2>
+          <p className="modal__sub">{nombreBarbero}</p>
+        </div>
+        <div className="modal__body">
+          {error && <div className="msg msg--error">{error}</div>}
+
+          <div className="edit-grid">
+            {/* Día */}
+            <div className="field">
+              <label htmlFor="hor-dia">Día de la semana</label>
+              <select id="hor-dia" value={f.diaSemana}
+                onChange={(e) => setF((s) => ({ ...s, diaSemana: e.target.value }))}
+                style={ctlStyle}
+                /* En edición el día no se cambia (es parte del índice único) */
+                disabled={!esNuevo}>
+                <option value="">Seleccionar…</option>
+                {DIAS.map((d, i) => <option key={i} value={i}>{d}</option>)}
+              </select>
+            </div>
+
+            {/* Estado */}
+            <div className="field">
+              <label htmlFor="hor-activo">Estado</label>
+              <select id="hor-activo" value={f.activo ? "si" : "no"}
+                onChange={(e) => setF((s) => ({ ...s, activo: e.target.value === "si" }))}
+                style={ctlStyle}>
+                <option value="si">Activo</option>
+                <option value="no">Inactivo</option>
+              </select>
+            </div>
+
+            {/* Hora inicio */}
+            <div className="field">
+              <label htmlFor="hor-inicio">Hora inicio</label>
+              <input id="hor-inicio" type="time" value={f.horaInicio} onChange={set("horaInicio")} />
+            </div>
+
+            {/* Hora fin */}
+            <div className="field">
+              <label htmlFor="hor-fin">Hora fin</label>
+              <input id="hor-fin" type="time" value={f.horaFin} onChange={set("horaFin")} />
+            </div>
+          </div>
+
+          {/* Descansos */}
+          <div style={{ marginTop: 14 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+              <label style={{ fontFamily: "var(--ff-body)", fontSize: 14, color: "var(--ink-soft)", fontWeight: 500 }}>
+                Descansos
+              </label>
+              <button type="button" className="btn btn--outline btn--xs" onClick={agregarDescanso}>
+                + Agregar
+              </button>
+            </div>
+
+            {f.descansos.length === 0 && (
+              <p style={{ fontSize: 13, color: "var(--ink-soft)", margin: 0 }}>Sin descansos asignados.</p>
+            )}
+
+            {f.descansos.map((d, i) => (
+              <div key={i} className="descanso-row">
+                <input type="time" value={d.inicio}
+                  onChange={(e) => setDescanso(i, "inicio", e.target.value)}
+                  placeholder="Inicio" />
+                <input type="time" value={d.fin}
+                  onChange={(e) => setDescanso(i, "fin", e.target.value)}
+                  placeholder="Fin" />
+                <button type="button" className="descanso-remove"
+                  aria-label="Quitar descanso" onClick={() => quitarDescanso(i)}>
+                  ×
+                </button>
+              </div>
+            ))}
+          </div>
+
+          <div style={{ display: "flex", gap: 10, marginTop: 20, flexWrap: "wrap" }}>
+            <button className="btn btn--gold btn--lg" onClick={guardar} disabled={loading}>
+              {loading ? "Guardando…" : (esNuevo ? "Crear horario" : "Guardar cambios")}
+            </button>
+            <button className="btn btn--ghost" onClick={onClose}
+              style={{ borderColor: "var(--hair)", color: "var(--ink-soft)" }}>
+              Cancelar
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── Panel de horarios de un barbero seleccionado ── */
+function PanelHorariosBarbero({ barbero }) {
+  const [horarios, setHorarios] = useState([]);
+  const [loading,  setLoading]  = useState(true);
+  const [error,    setError]    = useState(null);
+  const [editing,  setEditing]  = useState(null);   // horario | {} (nuevo)
+  const [deleting, setDeleting] = useState(null);
+
+  const cargar = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await apiFetch(
+        `${API.ADMIN}/api/admin/horarios/barberos?barberoId=${barbero._id}`
+      );
+      /* Ordenar por día para mostrar Lu–Do */
+      const ordenados = (res.data || []).sort((a, b) => a.diaSemana - b.diaSemana);
+      setHorarios(ordenados);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [barbero._id]);
+
+  useEffect(() => { cargar(); }, [cargar]);
+
+  /* Días que ya tienen horario (para info visual) */
+  const diasCubiertos = new Set(horarios.map((h) => h.diaSemana));
+
+  return (
+    <div>
+      {/* Cabecera del panel */}
+      <div className="dash-section-head" style={{ marginBottom: 12 }}>
+        <h2 style={{ marginBottom: 4 }}>{nombreCompleto(barbero)}</h2>
+        <p style={{ marginTop: 0 }}>
+          {diasCubiertos.size} de 7 días configurados
+          {diasCubiertos.size < 7 && (
+            <span style={{ color: "var(--ink-soft)" }}>
+              {" — "}faltan: {DIAS.filter((_, i) => !diasCubiertos.has(i)).join(", ")}
+            </span>
+          )}
+        </p>
+      </div>
+
+      <div style={{ marginBottom: 14 }}>
+        <button className="btn btn--gold btn--sm" onClick={() => setEditing({})}>
+          + Agregar horario
+        </button>
+      </div>
+
+      {loading && <div className="spinner" />}
+      {error   && <div className="msg msg--error">No se pudieron cargar los horarios: {error}</div>}
+
+      {!loading && !error && horarios.length === 0 && (
+        <div className="empty-state">
+          <p className="empty-state__title">Sin horarios</p>
+          <p className="empty-state__sub">
+            Este barbero no tiene horarios asignados. Usa «Agregar horario» para crear el primero.
+          </p>
+        </div>
+      )}
+
+      {!loading && !error && horarios.length > 0 && (
+        <div className="hor-grid">
+          {horarios.map((h) => (
+            <div key={h._id} className={`hor-card${h.activo === false ? " hor-card--inactivo" : ""}`}>
+              <div className="hor-card__head">
+                <span className="hor-card__dia">{DIAS[h.diaSemana]}</span>
+                <TagActivo activo={h.activo !== false} />
+              </div>
+
+              <div className="hor-card__horas">
+                <strong>{h.horaInicio}</strong>
+                <span style={{ margin: "0 6px", color: "var(--hair)" }}>→</span>
+                <strong>{h.horaFin}</strong>
+              </div>
+
+              {h.descansos && h.descansos.length > 0 && (
+                <div className="hor-card__descansos">
+                  {h.descansos.map((d, i) => (
+                    <span key={i} style={{ marginRight: 8 }}>
+                      ☕ {d.inicio}–{d.fin}
+                    </span>
+                  ))}
+                </div>
+              )}
+
+              <div className="hor-card__actions">
+                <button className="btn btn--outline btn--xs" onClick={() => setEditing(h)}>
+                  Editar
+                </button>
+                <button className="btn btn--danger btn--xs" onClick={() => setDeleting(h)}>
+                  Eliminar
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {editing !== null && (
+        <HorarioModal
+          horario={editing}
+          barberoId={barbero._id}
+          nombreBarbero={nombreCompleto(barbero)}
+          onClose={() => setEditing(null)}
+          onSaved={() => { setEditing(null); cargar(); }}
+        />
+      )}
+
+      {deleting && (
+        <ConfirmDeleteModal
+          titulo="Eliminar horario"
+          nombre={`${DIAS[deleting.diaSemana]} de ${nombreCompleto(barbero)}`}
+          onClose={() => setDeleting(null)}
+          onConfirm={async () => {
+            await apiFetch(
+              `${API.ADMIN}/api/admin/horarios/barberos/${deleting._id}`,
+              { method: "DELETE" }
+            );
+            setDeleting(null);
+            cargar();
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+/* ── Tab principal de Horarios ── */
+function HorariosTab() {
+  const [barberos,         setBarberos]         = useState([]);
+  const [loadingBarberos,  setLoadingBarberos]  = useState(true);
+  const [errorBarberos,    setErrorBarberos]    = useState(null);
+  const [barberoActivo,    setBarberoActivo]    = useState(null);
+
+  /* Cargar lista de barberos desde el módulo de usuarios */
+  useEffect(() => {
+    (async () => {
+      setLoadingBarberos(true);
+      setErrorBarberos(null);
+      try {
+        const p = new URLSearchParams();
+        p.set("tipoUsuario", "barbero");
+        p.set("limite", "100");
+        const res = await apiFetch(`${API.ADMIN}/api/admin/horarios/barberos/lista`);
+        const lista = res.data || [];
+        setBarberos(lista);
+        if (lista.length > 0) setBarberoActivo(lista[0]);
+      } catch (err) {
+        setErrorBarberos(err.message);
+      } finally {
+        setLoadingBarberos(false);
+      }
+    })();
+  }, []);
+
+  return (
+    <div>
+      <div className="dash-section-head">
+        <h2>Horarios de barberos</h2>
+        <p>
+          Configura los días y horas de trabajo de cada barbero. Cada día puede tener
+          su propio horario y descansos.
+        </p>
+      </div>
+
+      {loadingBarberos && <div className="spinner" />}
+      {errorBarberos && (
+        <div className="msg msg--error">
+          No se pudieron cargar los barberos: {errorBarberos}
+        </div>
+      )}
+
+      {!loadingBarberos && !errorBarberos && barberos.length === 0 && (
+        <div className="empty-state">
+          <p className="empty-state__title">Sin barberos registrados</p>
+          <p className="empty-state__sub">
+            Primero crea usuarios con el rol «Barbero» en la pestaña Usuarios.
+          </p>
+        </div>
+      )}
+
+      {!loadingBarberos && !errorBarberos && barberos.length > 0 && (
+        <div className="hor-layout">
+          {/* Sidebar: lista de barberos */}
+          <nav className="hor-sidebar" aria-label="Barberos">
+            <div className="hor-sidebar__title">Barberos</div>
+            {barberos.map((b) => (
+              <button
+                key={b._id}
+                className={`hor-barbero-btn${barberoActivo?._id === b._id ? " hor-barbero-btn--active" : ""}`}
+                onClick={() => setBarberoActivo(b)}
+              >
+                {b.nombreBarbero}
+              </button>
+            ))}
+          </nav>
+
+          {/* Panel derecho: horarios del barbero seleccionado */}
+          <div>
+            {barberoActivo
+              ? <PanelHorariosBarbero key={barberoActivo._id} barbero={barberoActivo} />
+              : <p style={{ color: "var(--ink-soft)" }}>Selecciona un barbero.</p>
+            }
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ════════════════════════════════════════════════════════════
    RAÍZ
    ════════════════════════════════════════════════════════════ */
@@ -634,14 +1677,19 @@ function Admin() {
       </section>
 
       <div className="dash-tabs">
-        <button
-          className={`dash-tab${tab === "estadisticas" ? " dash-tab--active" : ""}`}
-          onClick={() => setTab("estadisticas")}
-        >Estadísticas</button>
-        <button
-          className={`dash-tab${tab === "usuarios" ? " dash-tab--active" : ""}`}
-          onClick={() => setTab("usuarios")}
-        >Usuarios</button>
+        {[
+          ["estadisticas", "Estadísticas"],
+          ["usuarios",     "Usuarios"],
+          ["servicios",    "Servicios"],
+          ["productos",    "Productos"],
+          ["horarios",     "Horarios"],
+        ].map(([id, label]) => (
+          <button key={id}
+            className={`dash-tab${tab === id ? " dash-tab--active" : ""}`}
+            onClick={() => setTab(id)}>
+            {label}
+          </button>
+        ))}
       </div>
 
       <main className="dash-main">
@@ -655,7 +1703,10 @@ function Admin() {
           )}
 
           {tab === "estadisticas" && <EstadisticasTab />}
-          {tab === "usuarios" && <UsuariosTab />}
+          {tab === "usuarios"     && <UsuariosTab />}
+          {tab === "servicios"    && <ServiciosTab />}
+          {tab === "productos"    && <ProductosTab />}
+          {tab === "horarios"     && <HorariosTab />}
         </div>
       </main>
     </>

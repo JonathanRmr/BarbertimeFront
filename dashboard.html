@@ -243,10 +243,10 @@ function BookingPanel({ selectedSvc, onClearSvc, barbers, onBooked }) {
             >
               <option value="">— Elige tu barbero —</option>
               {barbers.map((b) => (
-                <option key={b.barberoId} value={b.barberoId}>
-                  {b.nombreBarbero}
+                <option key={b._id} value={b._id}>
+                    {b.nombreBarbero}
                 </option>
-              ))}
+                ))}
             </select>
           </div>
 
@@ -576,15 +576,8 @@ function Dashboard() {
   useEffect(() => {
     (async () => {
       try {
-        const res = await apiFetch(`${API.ADMIN}/api/admin/horarios/barberos?activo=true`);
-        const horarios = res.data || [];
-        const seen = new Set();
-        const unique = horarios.filter((h) => {
-          if (seen.has(h.barberoId)) return false;
-          seen.add(h.barberoId);
-          return true;
-        });
-        setBarbers(unique);
+        const res = await apiFetch(`${API.ADMIN}/api/admin/horarios/barberos/lista`);
+        setBarbers(res.data || []);
       } catch {
         setBarbers([]);
       }
